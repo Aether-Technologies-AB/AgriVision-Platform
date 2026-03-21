@@ -11,6 +11,8 @@ import {
   AlertCircle,
   ChevronDown,
   Clock,
+  Building2,
+  LayoutGrid,
 } from "lucide-react";
 import SensorCard from "@/components/dashboard/SensorCard";
 import EnvironmentChart from "@/components/dashboard/EnvironmentChart";
@@ -18,14 +20,43 @@ import ActiveBatchCard from "@/components/dashboard/ActiveBatchCard";
 import CameraFeed from "@/components/dashboard/CameraFeed";
 import AIDecisionFeed from "@/components/dashboard/AIDecisionFeed";
 import DeviceControl from "@/components/dashboard/DeviceControl";
+import ZoneMap from "@/components/dashboard/ZoneMap";
 import { usePolling } from "@/lib/use-polling";
+
+interface Farm {
+  id: string;
+  name: string;
+  zoneCount: number;
+}
 
 interface Zone {
   id: string;
   name: string;
   agentStatus: string;
   currentPhase: string;
-  farm: { name: string };
+  farm: { id: string; name: string };
+}
+
+interface ZoneMapData {
+  id: string;
+  name: string;
+  agentStatus: string;
+  agentLastSeen: string | null;
+  currentPhase: string;
+  batches: {
+    id: string;
+    batchNumber: string;
+    cropType: string;
+    phase: string;
+    day: number | null;
+    estCycleDays: number | null;
+    healthScore: number | null;
+  }[];
+  sensor: {
+    temperature: number;
+    humidity: number;
+    timestamp: string;
+  } | null;
 }
 
 interface LiveData {
@@ -110,77 +141,169 @@ function CurrentClock() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
-  return (
-    <span className="font-mono text-sm text-text-mid">{time}</span>
-  );
+  return <span className="font-mono text-sm text-text-mid">{time}</span>;
 }
 
 export default function DashboardPage() {
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [farms, setFarms] = useState<Farm[]>([]);
+  const [selectedFarmId, setSelectedFarmId] = useState<string | null>(null);
+  const [farmDropdownOpen, setFarmDropdownOpen] = useState(false);
 
-  // Fetch zones on mount
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null); // null = "All Zones"
+  const [zoneDropdownOpen, setZoneDropdownOpen] = useState(false);
+
+  // Zone map data (detail=true)
+  const [zoneMapData, setZoneMapData] = useState<ZoneMapData[]>([]);
+
+  // Fetch farms on mount
   useEffect(() => {
-    fetch("/api/zones")
+    fetch("/api/farms")
       .then((r) => r.json())
       .then((d) => {
-        setZones(d.zones || []);
-        if (d.zones?.length > 0 && !selectedZoneId) {
-          setSelectedZoneId(d.zones[0].id);
+        setFarms(d.farms || []);
+        if (d.farms?.length > 0 && !selectedFarmId) {
+          setSelectedFarmId(d.farms[0].id);
         }
       })
       .catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Fetch zones when farm changes
+  useEffect(() => {
+    if (!selectedFarmId) return;
+    const farmParam = `farmId=${selectedFarmId}`;
+
+    // Simple list for dropdown
+    fetch(`/api/zones?${farmParam}`)
+      .then((r) => r.json())
+      .then((d) => setZones(d.zones || []))
+      .catch(console.error);
+
+    // Detail data for zone map
+    fetch(`/api/zones?${farmParam}&detail=true`)
+      .then((r) => r.json())
+      .then((d) => setZoneMapData(d.zones || []))
+      .catch(console.error);
+
+    // Reset zone selection to "All Zones" when switching farms
+    setSelectedZoneId(null);
+  }, [selectedFarmId]);
+
+  // Refresh zone map every 30s
+  useEffect(() => {
+    if (!selectedFarmId || selectedZoneId) return; // only when viewing All Zones
+    const id = setInterval(() => {
+      fetch(`/api/zones?farmId=${selectedFarmId}&detail=true`)
+        .then((r) => r.json())
+        .then((d) => setZoneMapData(d.zones || []))
+        .catch(console.error);
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [selectedFarmId, selectedZoneId]);
+
   // Poll live data for selected zone
   const { data: live, isStale, lastUpdated } = usePolling<LiveData>({
-    url: selectedZoneId
-      ? `/api/dashboard/live/${selectedZoneId}`
-      : null,
+    url: selectedZoneId ? `/api/dashboard/live/${selectedZoneId}` : null,
     intervalMs: 10_000,
     enabled: !!selectedZoneId,
   });
 
   const selectedZone = zones.find((z) => z.id === selectedZoneId);
+  const selectedFarm = farms.find((f) => f.id === selectedFarmId);
   const agentOnline = live?.agent?.status === "ONLINE";
 
   return (
     <div className="space-y-4">
       {/* Top bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* Farm selector */}
+          {farms.length > 1 && (
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setFarmDropdownOpen(!farmDropdownOpen);
+                  setZoneDropdownOpen(false);
+                }}
+                className="flex items-center gap-2 rounded-lg border border-border bg-bg-card px-3 py-2 text-sm font-medium text-text transition-colors hover:border-green/30"
+              >
+                <Building2 className="h-3.5 w-3.5 text-text-dim" />
+                {selectedFarm?.name || "Select farm..."}
+                <ChevronDown className="h-3.5 w-3.5 text-text-dim" />
+              </button>
+              {farmDropdownOpen && (
+                <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-border bg-bg-card py-1 shadow-xl">
+                  {farms.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => {
+                        setSelectedFarmId(f.id);
+                        setFarmDropdownOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-green/5 ${
+                        f.id === selectedFarmId ? "text-green" : "text-text"
+                      }`}
+                    >
+                      <span>{f.name}</span>
+                      <span className="text-[10px] text-text-dim">{f.zoneCount} zones</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Zone selector */}
           <div className="relative">
             <button
-              onClick={() => setDropdownOpen(!dropdownOpen)}
+              onClick={() => {
+                setZoneDropdownOpen(!zoneDropdownOpen);
+                setFarmDropdownOpen(false);
+              }}
               className="flex items-center gap-2 rounded-lg border border-border bg-bg-card px-3 py-2 text-sm font-medium text-text transition-colors hover:border-green/30"
             >
-              {selectedZone ? (
+              {farms.length <= 1 && selectedFarm && (
                 <>
-                  <span>{selectedZone.farm.name}</span>
+                  <span className="text-text-mid">{selectedFarm.name}</span>
                   <span className="text-text-dim">/</span>
-                  <span>{selectedZone.name}</span>
                 </>
-              ) : (
-                <span className="text-text-dim">Select zone...</span>
               )}
-              <ChevronDown className="h-4 w-4 text-text-dim" />
+              {selectedZone ? (
+                <span>{selectedZone.name}</span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  All Zones
+                </span>
+              )}
+              <ChevronDown className="h-3.5 w-3.5 text-text-dim" />
             </button>
-            {dropdownOpen && (
+            {zoneDropdownOpen && (
               <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-border bg-bg-card py-1 shadow-xl">
+                <button
+                  onClick={() => {
+                    setSelectedZoneId(null);
+                    setZoneDropdownOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-green/5 ${
+                    !selectedZoneId ? "text-green" : "text-text"
+                  }`}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  All Zones
+                </button>
+                <div className="mx-2 my-1 border-t border-border" />
                 {zones.map((z) => (
                   <button
                     key={z.id}
                     onClick={() => {
                       setSelectedZoneId(z.id);
-                      setDropdownOpen(false);
+                      setZoneDropdownOpen(false);
                     }}
                     className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-green/5 ${
-                      z.id === selectedZoneId
-                        ? "text-green"
-                        : "text-text"
+                      z.id === selectedZoneId ? "text-green" : "text-text"
                     }`}
                   >
                     <span
@@ -192,35 +315,30 @@ export default function DashboardPage() {
                             : "bg-text-dim"
                       }`}
                     />
-                    <span>
-                      {z.farm.name} / {z.name}
-                    </span>
+                    {z.name}
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Agent status */}
-          <div className="flex items-center gap-2">
-            {agentOnline ? (
-              <Wifi className="h-4 w-4 text-green" />
-            ) : (
-              <WifiOff className="h-4 w-4 text-text-dim" />
-            )}
-            <span
-              className={`text-xs ${
-                agentOnline ? "text-green" : "text-text-dim"
-              }`}
-            >
-              {live?.agent?.status || "OFFLINE"}
-            </span>
-            <span className="text-xs text-text-dim">
-              {formatLastSeen(live?.agent?.lastSeen ?? null)}
-            </span>
-          </div>
+          {/* Agent status — only when a zone is selected */}
+          {selectedZoneId && (
+            <div className="flex items-center gap-2">
+              {agentOnline ? (
+                <Wifi className="h-4 w-4 text-green" />
+              ) : (
+                <WifiOff className="h-4 w-4 text-text-dim" />
+              )}
+              <span className={`text-xs ${agentOnline ? "text-green" : "text-text-dim"}`}>
+                {live?.agent?.status || "OFFLINE"}
+              </span>
+              <span className="text-xs text-text-dim">
+                {formatLastSeen(live?.agent?.lastSeen ?? null)}
+              </span>
+            </div>
+          )}
 
-          {/* Stale indicator */}
           {isStale && (
             <div className="flex items-center gap-1 rounded-md bg-amber/10 px-2 py-1 text-xs text-amber">
               <AlertCircle className="h-3 w-3" />
@@ -230,7 +348,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          {lastUpdated && (
+          {lastUpdated && selectedZoneId && (
             <span className="flex items-center gap-1 text-xs text-text-dim">
               <Clock className="h-3 w-3" />
               Updated{" "}
@@ -245,12 +363,18 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Main grid */}
-      {selectedZoneId ? (
+      {/* Content: All Zones view or single-zone detail */}
+      {!selectedZoneId ? (
+        /* ── All Zones: Zone Map ── */
+        <ZoneMap
+          zones={zoneMapData}
+          onSelectZone={(id) => setSelectedZoneId(id)}
+        />
+      ) : (
+        /* ── Single Zone: Detail view ── */
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
           {/* Left column - 3/5 */}
           <div className="space-y-4 lg:col-span-3">
-            {/* Sensor cards */}
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
               <SensorCard
                 label="Temperature"
@@ -292,32 +416,20 @@ export default function DashboardPage() {
               />
             </div>
 
-            {/* Environment chart */}
             <EnvironmentChart zoneId={selectedZoneId} />
-
-            {/* Active batch */}
             <ActiveBatchCard batch={live?.activeBatch ?? null} />
           </div>
 
           {/* Right column - 2/5 */}
           <div className="space-y-4 lg:col-span-2">
-            {/* Camera feed */}
             <CameraFeed photo={live?.latestPhoto ?? null} />
-
-            {/* AI Decisions */}
             <AIDecisionFeed decisions={live?.recentDecisions ?? []} />
-
-            {/* Device control */}
             <DeviceControl
               devices={live?.devices ?? []}
               zoneId={selectedZoneId}
               autoMode={live?.agent?.autoMode ?? true}
             />
           </div>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-border bg-bg-card p-12 text-center text-text-dim">
-          Select a zone to view live data
         </div>
       )}
     </div>

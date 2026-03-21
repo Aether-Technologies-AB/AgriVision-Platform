@@ -2,14 +2,14 @@
 
 ## What is this project?
 
-AgriVision AI is an autonomous smart farming SaaS platform. It uses on-device ML models, IoT sensors, and Claude AI strategic reasoning to manage indoor crop production — currently mushrooms, expanding to microgreens and leafy greens. Based in Stockholm, Sweden.
+AgriVision AI is an autonomous smart farming SaaS platform. It uses centralized ML models (fine-tuned from ImageNet, served via Vercel API), IoT sensors, and Claude AI strategic reasoning to manage indoor crop production — currently mushrooms, expanding to microgreens and leafy greens. Based in Stockholm, Sweden.
 
 The platform has three layers:
-1. **Edge (Raspberry Pi 4)** — sensors, cameras (Intel RealSense D435), ONNX ML inference, Tapo smart plugs, rule-based control. A Python agent (v13, evolving to v14) runs autonomously on each Pi.
-2. **Cloud (this codebase)** — Next.js web application on Vercel. Dashboard, batch management, scheduling, analytics, AI chat. Receives data from Pi agents via REST API.
-3. **Training (offline)** — Fine-tune models from ImageNet on proprietary crop data, export as quantized ONNX for Pi inference. Separate repo/notebooks.
+1. **Edge (Raspberry Pi 4)** — sensors, cameras (Intel RealSense D435), Tapo smart plugs, rule-based control. A Python agent (v14) runs autonomously on each Pi. The Pi captures frames and sends them to the cloud for ML analysis — it does NOT run models locally.
+2. **Cloud (this codebase)** — Next.js web application on Vercel. Dashboard, batch management, scheduling, analytics, AI chat, AND ML inference. Receives sensor data + camera frames from Pi agents, runs crop-specific ML models, returns structured analysis. All in one deployment.
+3. **Training (offline)** — Fine-tune models from ImageNet on proprietary crop data, export as quantized ONNX (INT8), upload to the platform. Separate repo/notebooks. Not part of this codebase.
 
-This repo is **layer 2** — the cloud platform.
+This repo is **layer 2** — the cloud platform including ML inference.
 
 ## Tech Stack
 
@@ -22,227 +22,344 @@ This repo is **layer 2** — the cloud platform.
 | Auth | NextAuth.js v5 (Auth.js) | Credentials + optional OAuth |
 | Charts | Recharts | All data visualizations |
 | Icons | Lucide React | Consistent icon set |
-| Image Storage | Vercel Blob | Camera photos from Pi agents |
-| AI | Claude API (Anthropic) | Chat interface + smart scheduler |
-| Deployment | Vercel | Zero-config |
+| Image Storage | Vercel Blob (Public) | Camera photos + ML model files |
+| ML Inference | ONNX Runtime (Node.js) | onnxruntime-node, runs in Vercel serverless functions |
+| AI | Claude API (Anthropic) | Chat interface + smart scheduler + strategic decisions |
+| Deployment | Vercel | Zero-config, Pro trial |
 
 ## Architecture
 
 ```
-Raspberry Pi (per farm)              Vercel (cloud)
-┌──────────────────────┐            ┌──────────────────────────┐
-│ RealSense D435 (RGB+D)│           │ Next.js App              │
-│ ESP32 sensors          │──HTTP──→ │ ├─ /api/agent/*  (ingest)│
-│ ONNX models (local ML) │  POST   │ ├─ /api/dashboard/* (UI) │
-│ Claude API (strategic)  │         │ ├─ /api/chat     (AI)   │
-│ Tapo plugs (actuators)  │←─HTTP──│ ├─ /api/commands  (ctrl) │
-│ Python agent v14        │  GET    │ └─ Pages (React)         │
-└──────────────────────┘            │                          │
-                                    │ Neon PostgreSQL           │
-                                    │ Vercel Blob (photos)      │
-                                    └──────────────────────────┘
+TRAINING PIPELINE (offline, GPU machine — separate repo)
+┌─────────────────────────────────────────────────┐
+│  ImageNet pretrained → fine-tune on crop data    │
+│  → export quantized ONNX (INT8, 5-20 MB each)  │
+│  → upload .onnx files to Vercel Blob             │
+│  Runs on: Colab / local GPU / Hetzner            │
+└──────────────┬──────────────────────────────────┘
+               │ .onnx files stored in Vercel Blob
+               ▼
+VERCEL (cloud — this codebase)
+┌─────────────────────────────────────────────────────────────────┐
+│  Next.js App                                                     │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────┐     │
+│  │ ML INFERENCE ENGINE (/api/ml/predict)                    │     │
+│  │                                                           │     │
+│  │  Pi sends image + batchId                                 │     │
+│  │  → looks up batch → gets cropType (e.g. "oyster_blue")   │     │
+│  │  → loads correct models from Blob/cache:                  │     │
+│  │    /models/oyster/contamination_v2.onnx                   │     │
+│  │    /models/oyster/growth_stage_v1.onnx                    │     │
+│  │    /models/oyster/weight_predictor_v3.onnx                │     │
+│  │  → runs onnxruntime-node inference                        │     │
+│  │  → returns structured JSON to Pi                          │     │
+│  │                                                           │     │
+│  │  Model selection is AUTOMATIC based on crop type.         │     │
+│  │  Client picks crop when creating batch → platform         │     │
+│  │  handles the rest. No manual model deployment.            │     │
+│  └─────────────────────────────────────────────────────────┘     │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────┐     │
+│  │ AGENT API (/api/agent/*)                                  │     │
+│  │  POST /sensor    — ingest sensor readings                 │     │
+│  │  POST /decision  — ingest Claude AI decisions             │     │
+│  │  POST /photo     — ingest camera images to Blob           │     │
+│  │  POST /vision    — ingest ML results (from /ml/predict)   │     │
+│  │  GET  /commands   — Pi polls for user commands             │     │
+│  │  PATCH /commands  — Pi acknowledges commands               │     │
+│  │  GET  /models     — Pi checks for model updates            │     │
+│  └─────────────────────────────────────────────────────────┘     │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────┐     │
+│  │ DASHBOARD + BUSINESS + SETTINGS APIs                      │     │
+│  │  /api/dashboard/*  — live data, history                    │     │
+│  │  /api/batches/*    — batch lifecycle CRUD                  │     │
+│  │  /api/analytics/*  — profit, yield, KPIs                   │     │
+│  │  /api/schedule/*   — calendar + AI smart scheduler         │     │
+│  │  /api/chat         — AI assistant with farm context        │     │
+│  │  /api/commands/*   — issue commands to Pi                  │     │
+│  │  /api/settings/*   — farm, zones, users, API keys          │     │
+│  └─────────────────────────────────────────────────────────┘     │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────┐     │
+│  │ FRONTEND (React pages)                                    │     │
+│  │  / (Dashboard)  /batches  /scheduler                      │     │
+│  │  /analytics     /chat     /settings                       │     │
+│  └─────────────────────────────────────────────────────────┘     │
+│                                                                   │
+│  Neon PostgreSQL (all persistent data)                            │
+│  Vercel Blob (photos + .onnx model files)                        │
+└─────────────────────────────────────────────────────────────────┘
+               ▲                    │
+               │ HTTP POST          │ HTTP GET (commands)
+               │ (sensor, photo,    │ JSON responses
+               │  request predict)  │ (ML results, commands)
+               │                    ▼
+RASPBERRY PI 4 (edge, one per farm/zone)
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                   │
+│  Hardware:                                                        │
+│  • Intel RealSense D435 (RGB 1280x720 + depth 1280x720)         │
+│  • ESP32 sensors (temperature, humidity, CO2)                     │
+│  • Tapo P110 smart plugs (humidifier, fan, light)                │
+│                                                                   │
+│  Software (Python, async):                                        │
+│  ┌───────────────────────────────────────────────────────────┐   │
+│  │ TIER 1 — RULE ENGINE (always on, no internet needed)       │   │
+│  │ • Humidity control: if < 85% → mist, if > 92% → fan       │   │
+│  │ • Fresh air cycles: fan every 20-30 min for CO2            │   │
+│  │ • Light schedule: 12h on/off during fruiting               │   │
+│  │ • Temperature alerts: warn if outside 15-25°C range        │   │
+│  │ Handles 95% of operations. Cost: FREE.                     │   │
+│  └───────────────────────────────────────────────────────────┘   │
+│  ┌───────────────────────────────────────────────────────────┐   │
+│  │ TIER 2 — ML VISION (cloud, every 4-6h)                     │   │
+│  │ • Capture RGB + depth frame from RealSense                 │   │
+│  │ • POST image to /api/ml/predict                            │   │
+│  │ • Receive structured analysis (counts, weight, quality)    │   │
+│  │ • Model selection is automatic based on batch crop type     │   │
+│  │ Cost: FREE (Vercel serverless compute)                      │   │
+│  └───────────────────────────────────────────────────────────┘   │
+│  ┌───────────────────────────────────────────────────────────┐   │
+│  │ TIER 3 — STRATEGIC AI (Claude API, 2-4x daily)            │   │
+│  │ • Receives structured ML outputs (numbers, not photos)     │   │
+│  │ • Harvest timing, profit optimization, scheduling          │   │
+│  │ • Every decision explained in natural language              │   │
+│  │ Cost: ~0.25 kr/call, ~30 kr/month                          │   │
+│  └───────────────────────────────────────────────────────────┘   │
+│  ┌───────────────────────────────────────────────────────────┐   │
+│  │ CLOUD SYNC (continuous)                                     │   │
+│  │ • Sensor data every 5-10 min → /api/agent/sensor           │   │
+│  │ • Photos every 4-6h → /api/agent/photo                     │   │
+│  │ • ML prediction request → /api/ml/predict                   │   │
+│  │ • AI decisions → /api/agent/decision                        │   │
+│  │ • ML results → /api/agent/vision                            │   │
+│  │ • Command poll every 30s → /api/agent/commands              │   │
+│  │ • All calls try/except — never crashes                      │   │
+│  └───────────────────────────────────────────────────────────┘   │
+│                                                                   │
+│  Fallbacks: Google Sheets + Telegram remain active                │
+│  If internet drops: Tier 1 keeps crops alive autonomously         │
+└─────────────────────────────────────────────────────────────────┘
 ```
-
-Pi pushes data via POST. Pi polls for commands via GET every 30s. Frontend polls `/api/dashboard/live` every 10s for real-time feel. No WebSockets needed at pilot scale.
 
 ## Three-Tier Reliability Model
 
-The farm never depends on a single point of failure:
-- **Tier 1 (always on):** Rule engine on Pi. Humidity control, fresh air cycles, light schedules. No internet needed. Handles 95% of operations. Free.
-- **Tier 2 (local ML):** ONNX models on Pi. Growth measurement, contamination detection, quality grading. No internet needed. Runs every 4-6h. Free.
-- **Tier 3 (strategic):** Claude API. Profit optimization, harvest timing, scheduling, anomaly reasoning. 2-4x daily. ~0.25 kr/call, ~30 kr/month. If API goes down 24h, crops are safe — you just miss ~10-15% profit optimization.
+- **Tier 1 (always on):** Rule engine on Pi. No internet needed. 95% of operations. Free.
+- **Tier 2 (cloud ML):** ML inference on Vercel. Pi sends photo → cloud runs crop-specific models → returns analysis. Every 4-6h. Free (serverless).
+- **Tier 3 (strategic AI):** Claude API. Profit optimization, harvest timing, scheduling. 2-4x daily. ~30 kr/month.
+
+**If internet drops:** Tier 1 keeps crops alive. Lose Tier 2+3 = miss ~10-15% optimization. **If Claude API drops:** Tier 1+2 still work. **All three down:** Impossible (Tier 1 is local).
+
+## ML Inference on Vercel
+
+### Why cloud, not Pi
+
+When a client says "I grow lion's mane," the platform automatically uses lion's mane models. No SSH, no model deployment to devices. Model upgrades reach all clients instantly. This is what makes it SaaS.
+
+### Endpoint: POST /api/ml/predict
+
+```json
+// Request (from Pi, authenticated by API key)
+{
+  "batchId": "clxyz...",
+  "image": "<base64 JPEG>"
+}
+
+// Server logic:
+// 1. Look up batch → cropType "oyster_blue" → model family "oyster"
+// 2. Query MLModel for active models where cropType = "oyster"
+// 3. Fetch .onnx from Blob (cached in /tmp after first load)
+// 4. Run onnxruntime-node inference
+// 5. Return results
+
+// Response
+{
+  "mushroom_count": 12,
+  "pin_count": 3,
+  "avg_diameter_cm": 6.2,
+  "contamination_risk": 0.02,
+  "estimated_weight_g": 380,
+  "growth_rate_cm3_day": 1.8,
+  "harvest_readiness": 0.72,
+  "quality_prediction": "A",
+  "models_used": {
+    "contamination": "v2.0.0",
+    "growth_stage": "v1.0.0",
+    "weight": "v3.0.0"
+  }
+}
+```
+
+### Model storage
+
+ONNX files stored in Vercel Blob organized by crop:
+```
+models/oyster/contamination_v2.onnx
+models/oyster/growth_stage_v1.onnx
+models/oyster/weight_predictor_v3.onnx
+models/lions_mane/contamination_v1.onnx
+...
+```
+
+MLModel database table tracks versions, accuracy, and active status. Settings → Models page manages the registry.
+
+### Constraints
+- Models must be quantized INT8 ONNX (5-20 MB each)
+- Vercel timeout: 60s (Pro). Inference should complete in <2s.
+- Models cached in /tmp within serverless function instance
+- If no models exist for a crop → return fallback response, Pi uses Claude vision
+
+### Adding a new crop
+1. Collect training photos from clients growing that crop
+2. Fine-tune + export ONNX in training pipeline
+3. Upload to Blob + register in MLModel table
+4. All clients with that crop instantly get ML predictions
 
 ## Database Schema Overview
 
-Multi-tenant SaaS structure:
+Multi-tenant SaaS:
 - `Organization` → `Farm` → `Zone` → data tables
-- `User` (belongs to org, has role: OWNER/OPERATOR/VIEWER)
-- `ApiKey` (scoped to farm, used by Pi agents to authenticate)
-- `Batch` (core unit — tracks a crop from planting to harvest)
+- `User` (role: OWNER/OPERATOR/VIEWER)
+- `ApiKey` (scoped to farm, used by Pi agents)
+- `Batch` (core unit — cropType drives automatic model selection)
 - `SensorReading` (time-series: temp, humidity, CO2, VPD)
-- `Photo` (RGB + depth URLs, ML analysis JSON)
-- `AIDecision` (Claude's reasoning, action taken, cost)
-- `Harvest` (actual weight, revenue, cost breakdown, profit)
-- `ScheduleEvent` (planned events: inoculation, harvest, delivery)
-- `DeviceState` (humidifier/fan/light on/off status)
-- `Command` (user-issued commands queued for Pi to execute)
-- `MLModel` (model registry: name, version, ONNX file URL, active flag)
-
-Full schema is in `prisma/schema.prisma`. See `agrivision_build_spec.md` for complete field definitions.
+- `Photo` (RGB + depth URLs in Blob, ML analysis JSON)
+- `AIDecision` (Claude reasoning, action, cost)
+- `Harvest` (weight, revenue, cost breakdown, profit)
+- `ScheduleEvent` (planned events)
+- `DeviceState` (humidifier/fan/light status)
+- `Command` (queued for Pi execution)
+- `MLModel` (registry: name, version, cropType, ONNX Blob URL, accuracy, isActive)
 
 ## Key Domain Concepts
 
-**Growth phases:** COLONIZATION → FRUITING → HARVESTING. Colonization is when mycelium spreads through substrate (no intervention needed, just monitoring). Fruiting is triggered manually (user confirms "fruiting start"), then mushrooms grow over ~7-14 days. Harvest timing is profit-optimized by AI.
+**Facility (Farm):** A physical location where crops are grown. A client might have multiple facilities in different locations (e.g. Södermalm warehouse + Vällingby basement). Each facility has its own address, timezone, and set of zones. The top bar has a **farm selector** so users can switch between facilities — all data (dashboard, batches, scheduler, analytics) filters to the selected farm.
 
-**Two-tier cost architecture:** Cheap rule-based control handles humidity/fan cycles (95% of actions, free). Expensive AI handles strategic decisions (5% of actions, ~0.25 kr each). Never waste an AI call on something a simple threshold can handle.
+**Zone:** A controlled growing environment within a facility — one room, tent, shelf section, or climate area. Each zone has its own hardware (camera, sensors, plugs) and runs one set of environmental conditions at a time. One Pi agent reports to one zone. A zone can hold multiple batches simultaneously if they share the same conditions, but typically one batch per zone.
 
-**Harvest profit optimizer:** The AI calculates: current weight × market price vs. projected weight gain minus additional energy/facility costs. It recommends the most profitable day, not just "big enough." Example: wait 2 days = +18g still A-grade = +4.1 kr/bag. Wait 5 days = +90g but B-grade = -13 kr/bag. AI finds the sweet spot.
+**Batch:** A crop cycle that happens inside a zone. Has a start and end. Zone A might run Batch B-001 (oyster, 28 days), then B-005 (lion's mane, 35 days), then B-012 (shiitake, 42 days). The batch's cropType drives automatic ML model selection.
 
-**Smart scheduler:** Input a delivery date + kg needed → AI back-calculates planting date, zone assignment, bag count, accounting for crop cycle time, facility capacity, and batch staggering.
+**Growth phases:** COLONIZATION → FRUITING → HARVESTING. Colonization = mycelium spreads through substrate (monitoring only). Fruiting = triggered manually ("fruiting start"), mushrooms grow 7-14 days. Harvest timing = profit-optimized by AI.
+
+**New Batch vs Smart Scheduler:**
+- **New Batch** (from `/batches` → "+ New Batch") = manual operational action. You know what to plant, where, when. You pick zone, crop, bags, date. Like creating a task.
+- **Smart Scheduler** (from `/scheduler`) = AI planning from a business need. Input: "I need 5 kg of oyster delivered April 20." Output: AI recommends planting date, zone (based on availability), bag count, confidence score. Click "Create Batch from Plan" to execute. Future: handles multi-batch staggering for continuous harvest cycles.
+
+**Harvest profit optimizer:** Current weight × market price vs. projected gain − additional costs. Recommends most profitable harvest day. Example: wait 2 days = +18g still A-grade = +4.1 kr/bag.
+
+**Automatic model selection:** Batch cropType → model family → active ONNX files. Client never touches ML.
 
 **Sensor targets (mushrooms):**
 - Temperature: 17-20°C (colonization), 15-18°C (fruiting)
-- Humidity: 85-95% (fruiting — controlled by AI via humidifier)
-- CO2: <1000 ppm (fresh air cycles every 20-30 min)
-- Light: Indirect, 12h cycle during fruiting
+- Humidity: 85-95% (fruiting)
+- CO2: <1000 ppm
+- Light: 12h cycle during fruiting
 
 ## Project Pages
 
 | Route | Purpose |
 |-------|---------|
-| `/` | Live dashboard — sensor gauges, camera feed, AI decision feed, device controls |
-| `/batches` | Batch list + detail view with full event timeline |
-| `/scheduler` | Calendar + smart scheduler (AI-powered production planning) |
-| `/analytics` | Profit tracking, yield curves, cost-per-gram trends, ROI |
-| `/chat` | AI assistant — ask anything about your farm in natural language |
-| `/settings` | Farm/zone config, API keys, users, notifications |
-| `/login` | Auth |
+| `/` | Live dashboard — sensor gauges, camera feed, AI decisions, devices, **zone map** |
+| `/batches` | Batch lifecycle management + timeline |
+| `/scheduler` | Calendar + AI production planning (smart scheduler) |
+| `/analytics` | Profit, yield, cost-per-gram trends |
+| `/chat` | AI assistant with farm context |
+| `/settings` | Farm, zones, API keys, users, models |
 
-## API Structure
+### Zone Map (new component on Dashboard)
 
-**Agent endpoints** (`/api/agent/*`) — called by Pi, authenticated by API key in `Authorization: Bearer` header:
-- `POST /api/agent/sensor` — push sensor reading
-- `POST /api/agent/vision` — push ML inference results
-- `POST /api/agent/decision` — push Claude AI decision + reasoning
-- `POST /api/agent/photo` — upload camera image (multipart)
-- `GET /api/agent/commands?zoneId=...` — poll for pending commands
-- `PATCH /api/agent/commands/:id` — acknowledge/complete command
-- `GET /api/agent/models?cropType=...` — check for model updates
+A visual overview of the entire facility. Shows all zones as rectangular blocks arranged in a grid. Inside each zone block, batches are shown as colored sub-blocks. The batch color represents maturity on a gradient:
 
-**Dashboard endpoints** (`/api/dashboard/*`) — called by frontend, authenticated by session:
-- `GET /api/dashboard/live/:zoneId` — latest sensors + devices + agent status
-- `GET /api/dashboard/history/:zoneId?range=24h|7d|30d` — sensor time-series
-
-**Resource endpoints** — standard CRUD:
-- `/api/batches` — list, create, update batches
-- `/api/batches/:id/timeline` — full event timeline
-- `/api/schedule` — list, create schedule events
-- `/api/schedule/smart` — AI-powered production planning
-- `/api/analytics/profit` — profit analytics
-- `/api/analytics/yield` — yield analytics
-- `/api/chat` — AI chat with farm context injection
-- `/api/commands/:zoneId` — issue command to Pi agent
-
-## Design System
-
-Dark mode. Agricultural/organic feel — NASA mission control meets greenhouse.
-
-**Colors:**
 ```
-bg:          #0a0f0d  (near-black green)
-bgCard:      #111916
-border:      #1e2e25
-green:       #4abe7b  (primary brand color)
-greenBright: #6ee7a0
-greenDim:    #2d5a3f
-amber:       #e8a830  (warnings, highlights)
-red:         #ef4444  (alerts, errors)
-blue:        #3b82f6  (info, colonization phase)
-purple:      #a78bfa  (ML/AI indicators)
-text:        #e8f0eb  (primary)
-textMid:     #8aaa96  (secondary)
-textDim:     #4a6b55  (muted)
+Maturity gradient:
+  PLANNED/EARLY     →    MID-CYCLE     →    NEAR HARVEST
+  yellow (#e8a830)  →  yellow-green    →    green (#4abe7b)
+  
+  COLONIZATION = yellow tones (early, growing mycelium)
+  EARLY FRUITING = yellow-green (pins forming)
+  LATE FRUITING = green (clusters mature, approaching harvest)
+  READY TO HARVEST = bright green with pulse animation
+  HARVESTED = gray (completed)
 ```
 
-**Typography:** Monospace (JetBrains Mono / SF Mono) for data values and sensor readings. Clean sans-serif (Outfit) for labels and body text.
+Example layout for a facility with 4 zones:
+```
+┌─────────────────┐  ┌─────────────────┐
+│ ZONE A           │  │ ZONE B           │
+│ ┌──────┐┌──────┐│  │ ┌──────────────┐│
+│ │B-001 ││B-002 ││  │ │   B-002      ││
+│ │ 🟡   ││ 🟡   ││  │ │   🟢         ││
+│ └──────┘└──────┘│  │ └──────────────┘│
+│ 18.4°C  87% RH  │  │ 17.2°C  91% RH  │
+└─────────────────┘  └─────────────────┘
+┌─────────────────┐  ┌─────────────────┐
+│ ZONE C           │  │ ZONE D           │
+│ ┌──────────────┐│  │ ┌──────┐┌──────┐│
+│ │   B-003      ││  │ │B-003 ││B-004 ││
+│ │   ⚪         ││  │ │ ⚪   ││ 🟢   ││
+│ └──────────────┘│  │ └──────┘└──────┘│
+│ OFFLINE          │  │ 19.1°C  85% RH  │
+└─────────────────┘  └─────────────────┘
+```
 
-**Principles:**
-- Data-dense but not cluttered
-- Real-time feel: subtle animations on data changes, pulsing status dots
-- Phase-aware coloring: blue = colonization, green = fruiting, amber = harvested/warning, red = alert
+Each zone block shows: zone name, batch sub-blocks with maturity color, current sensor summary (temp + humidity), agent status. Clicking a zone navigates to the dashboard filtered to that zone. Clicking a batch navigates to the batch detail page.
 
-## Code Conventions
+This is the first thing the user sees on the dashboard — the facility-level overview. Below it: the detailed sensor charts, camera feed, and AI decisions for the currently selected zone.
 
-- All files TypeScript (`.ts` / `.tsx`)
-- Use Prisma client singleton from `src/lib/prisma.ts`
-- API routes return proper HTTP status codes with `{ error: string }` on failure
-- Agent API routes validate API key via `src/lib/api-key.ts` middleware
-- Dashboard API routes check NextAuth session
-- All timestamps stored UTC, displayed in farm timezone
-- Use Prisma `include` and `select` to avoid N+1 queries
-- React components in `src/components/` organized by page
-- Shared UI primitives in `src/components/ui/`
-- Custom hooks for polling: `usePolling(url, intervalMs)` with stale-data indicators
+### Top Bar Navigation
+
+```
+[ Farm Selector ▾ ] / [ Zone Selector ▾ ]  •  🟢 ONLINE 2m ago  |  15:48:56
+```
+
+- **Farm selector:** dropdown of all farms in the user's organization. Switching farms reloads all data.
+- **Zone selector:** dropdown of zones in the selected farm. "All Zones" shows the zone map. Selecting a specific zone shows detailed dashboard for that zone.
+
+## Build Status
+
+Steps 1-11 COMPLETE. Platform deployed on Vercel, receiving live Pi data.
+
+### Next to build:
+- **Zone Map component** — visual facility overview on dashboard showing all zones with batch maturity gradient (yellow→green). Clickable zones and batches.
+- **Farm selector** in top bar — switch between facilities, all pages filter to selected farm
+- **Top bar "All Zones" view** — zone selector gets "All Zones" option that shows zone map instead of single-zone detail
+- Photo upload fix (handle .npy depth files, verify Blob token)
+- Clean seed data vs real data (dashboard should show real Pi data, not seed placeholders)
+- AI decisions feed: query should show real decisions from Pi, not just seed data
+- Device state sync from Pi (or show "no data" when stale)
+- `POST /api/ml/predict` endpoint (onnxruntime-node) — for when training data is ready
+- Model upload flow in Settings → Models
+- Pi agent: replace Claude vision calls with /api/ml/predict (when models ready)
+- Smart scheduler: verify Claude API call works with real batch history data
 
 ## Environment Variables
 
 ```
 DATABASE_URL          — Neon Postgres connection string
-NEXTAUTH_SECRET       — Random secret for session encryption
-NEXTAUTH_URL          — App URL (http://localhost:3000 in dev)
-ANTHROPIC_API_KEY     — For AI chat + smart scheduler
-BLOB_READ_WRITE_TOKEN — Vercel Blob for photo storage
+NEXTAUTH_SECRET       — Session encryption secret
+ANTHROPIC_API_KEY     — Claude API for chat + scheduler + decisions
+BLOB_READ_WRITE_TOKEN — Vercel Blob for photos + model files
 ```
 
-## Build Order
+## Code Conventions
 
-Work through these sequentially. Each step should be testable before moving on.
-
-1. Project scaffold (Next.js + Tailwind + Prisma + layout with sidebar)
-2. Database schema + seed data (realistic demo: 1 org, 1 farm, 3 zones, 5 batches, 48h sensor data)
-3. Auth (NextAuth credentials provider, login/register, route protection)
-4. Agent API endpoints (all `/api/agent/*` — enables Pi integration)
-5. Dashboard page (live monitoring with 10s polling)
-6. Batches page (list + detail with timeline)
-7. Analytics page (profit charts, yield curves, KPIs)
-8. Scheduler page (calendar + smart scheduler with Claude)
-9. AI Chat page (conversational interface with farm context injection)
-10. Settings page (farm/zone config, API keys, users)
-11. Pi agent v14 module (`pi-agent/api_sync.py` + `ml_inference.py`)
-
-## Key Files Reference
-
-- `agrivision_build_spec.md` — Full detailed specification with API request/response examples, page layouts, and Prisma schema
-- `prisma/schema.prisma` — Database schema (source of truth for all data models)
-- `src/lib/prisma.ts` — Prisma client singleton
-- `src/lib/auth.ts` — NextAuth configuration
-- `src/lib/api-key.ts` — Agent API key validation
-- `src/lib/claude.ts` — Claude API helper with farm context injection
-
-## Context for AI Chat Implementation
-
-When the user sends a message to `/api/chat`, construct a Claude system prompt that includes:
-- Organization + farm + zone name
-- Current sensor reading (latest from DB)
-- Active batch summary (batch number, crop, phase, day X of Y, health score)
-- Last 5 AI decisions (timestamp, type, reasoning — compressed)
-- Last 5 ML vision results (mushroom count, weight estimate, growth rate)
-- Historical averages (avg cycle time per crop, avg yield per bag, avg cost-per-gram)
-- User's role (owner sees profit data, operator sees operational data)
-
-Keep total context under 4000 tokens. Send summaries, not raw data:
-- 24 hourly sensor averages (not 288 raw readings)
-- 7 daily averages (not 2016 readings)
-- Latest scan + 5 trend points (not all photos)
-- Batch history as 1 row per completed batch
-
-## Existing Python Agent (v13) Reference
-
-The Pi agent is a single Python file (`mushroom_farm_agent_v13.py`) running async tasks:
-- `task_sensor_control()` — reads ESP32, controls humidity via Tapo plugs
-- `task_fresh_air()` — periodic fan cycles for CO2 control
-- `task_photos()` — captures RGB+depth from RealSense, uploads to Google Drive
-- `task_vision()` — sends photos to Claude API for analysis (to be replaced by local ONNX inference in v14)
-- Telegram bot for remote commands (fruiting start, enable/disable auto)
-- Flask dashboard on port 5555 (to be replaced by this cloud platform)
-
-The v14 upgrade adds:
-- `api_sync.py` — HTTP POST to cloud API on every sensor read, AI decision, and photo
-- `ml_inference.py` — loads ONNX models, runs inference on RGB+D frames, outputs structured JSON
-- Command polling from cloud API (replaces Telegram as primary control)
-- Telegram + Google Sheets remain as fallbacks
+- TypeScript everywhere (.ts/.tsx)
+- Prisma singleton from `src/lib/prisma.ts`
+- Agent routes: API key auth via `src/lib/api-key.ts`
+- ML predict route: API key auth (same as agent)
+- Dashboard routes: NextAuth session auth
+- Timestamps: stored UTC, displayed in farm timezone
+- Components organized by page in `src/components/`
 
 ## Pilot Partners
 
-Three identified partners for testing:
-1. **Mushu Mushrooms** (mushumushrooms.se) — 50m², direct integration, ready now. Lion's Mane, Oyster, Shiitake.
-2. **Urban Seeds** (urbanseeds.se) — 30m² microgreens in Stockholm. Needs tent-in-farm setup.
-3. **Nära** (nära.se) — 800m² industrial vertical farm. Needs tent-as-proxy clone.
+1. **Mushu Mushrooms** — 50m², Lion's Mane + Oyster + Shiitake. Ready now.
+2. **Urban Seeds** — 30m² microgreens, Stockholm.
+3. **Nära** — 800m² industrial vertical farm.
 
 ## Business Model
 
-SaaS tiers:
-- Starter (€30/mo): 1 zone, AI monitoring, basic scheduling
-- Pro (€100-200/mo): 5 zones, 3D vision, harvest optimizer, multi-crop
-- Business (€500-1,500/mo): Unlimited zones, full scheduling, profit analytics, API
-- OEM (custom): White-label for equipment manufacturers
+- Business from €500/mo (unlimited zones, full scheduling, profit analytics, ML vision, API, dedicated support)
+- OEM custom (white-label for equipment manufacturers)
