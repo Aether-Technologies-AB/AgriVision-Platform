@@ -49,18 +49,18 @@ export async function POST(request: NextRequest) {
 
     // Calculate averages
     const cycleTimes = completedBatches
-      .filter((b) => b.plantedAt && b.harvestedAt)
-      .map((b) => Math.floor((b.harvestedAt!.getTime() - b.plantedAt!.getTime()) / (1000 * 60 * 60 * 24)));
-    const avgCycleTime = cycleTimes.length > 0 ? Math.round(cycleTimes.reduce((a, b) => a + b, 0) / cycleTimes.length) : 28;
+      .filter((b: any) => b.plantedAt && b.harvestedAt)
+      .map((b: any) => Math.floor((b.harvestedAt!.getTime() - b.plantedAt!.getTime()) / (1000 * 60 * 60 * 24)));
+    const avgCycleTime = cycleTimes.length > 0 ? Math.round(cycleTimes.reduce((a: any, b: any) => a + b, 0) / cycleTimes.length) : 28;
 
-    const yields = completedBatches.filter((b) => b.actualYieldKg && b.bagCount);
+    const yields = completedBatches.filter((b: any) => b.actualYieldKg && b.bagCount);
     const avgYieldPerBag = yields.length > 0
-      ? yields.reduce((s, b) => s + (b.actualYieldKg! / b.bagCount), 0) / yields.length
+      ? yields.reduce((s: any, b: any) => s + (b.actualYieldKg! / b.bagCount), 0) / yields.length
       : 0.5;
 
-    const zonesSummary = zones.map((z) => ({
+    const zonesSummary = zones.map((z: any) => ({
       name: z.name,
-      activeBatches: z.batches.map((b) => `${b.batchNumber} (${b.phase}, est. harvest: ${b.estHarvestDate ? new Date(b.estHarvestDate).toISOString().slice(0, 10) : "unknown"})`),
+      activeBatches: z.batches.map((b: any) => `${b.batchNumber} (${b.phase}, est. harvest: ${b.estHarvestDate ? new Date(b.estHarvestDate).toISOString().slice(0, 10) : "unknown"})`),
     }));
 
     const systemPrompt = `You are AgriVision AI's production scheduler. Given a delivery request, calculate the optimal planting plan.
@@ -71,7 +71,7 @@ Historical data:
 - Completed batches: ${completedBatches.length}
 
 Available zones:
-${zonesSummary.map((z) => `- ${z.name}: ${z.activeBatches.length > 0 ? z.activeBatches.join(", ") : "Available"}`).join("\n")}
+${zonesSummary.map((z: any) => `- ${z.name}: ${z.activeBatches.length > 0 ? z.activeBatches.join(", ") : "Available"}`).join("\n")}
 
 Today's date: ${new Date().toISOString().slice(0, 10)}
 

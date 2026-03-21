@@ -21,7 +21,7 @@ export async function GET() {
       orderBy: { harvestedAt: "asc" },
     });
 
-    const yieldData = batches.map((b) => {
+    const yieldData = batches.map((b: any) => {
       const h = b.harvests[0];
       const daysToHarvest =
         b.plantedAt && b.harvestedAt

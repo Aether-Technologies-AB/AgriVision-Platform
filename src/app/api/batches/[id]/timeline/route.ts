@@ -102,7 +102,7 @@ export async function GET(
     // Merge and sort
     const timeline: TimelineEvent[] = [];
 
-    for (const d of decisions) {
+    for (const d of decisions as any[]) {
       timeline.push({
         id: d.id,
         type: "decision",
@@ -114,7 +114,7 @@ export async function GET(
       });
     }
 
-    for (const p of photos) {
+    for (const p of photos as any[]) {
       const analysis = p.analysis as Record<string, unknown> | null;
       timeline.push({
         id: p.id,
@@ -129,7 +129,7 @@ export async function GET(
       });
     }
 
-    for (const e of events) {
+    for (const e of events as any[]) {
       timeline.push({
         id: e.id,
         type: "event",

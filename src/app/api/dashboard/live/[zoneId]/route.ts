@@ -123,7 +123,7 @@ export async function GET(
             vpd: sensorOneHourAgo.vpd,
           }
         : null,
-      devices: devices.map((d) => ({
+      devices: devices.map((d: any) => ({
         id: d.id,
         type: d.deviceType,
         name: d.deviceName,

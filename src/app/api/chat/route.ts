@@ -80,28 +80,28 @@ export async function POST(request: NextRequest) {
     const orgName = org?.name || "Unknown Org";
 
     // Build context sections
-    const zoneSummary = zones.map((z) => {
+    const zoneSummary = zones.map((z: any) => {
       const s = z.sensorReadings[0];
       return `  ${z.name}: ${z.agentStatus}${z.agentStatus === "ONLINE" ? "" : " (offline)"}, phase: ${z.currentPhase}, auto: ${z.autoMode ? "yes" : "no"}${s ? `, temp: ${s.temperature.toFixed(1)}°C, humidity: ${s.humidity.toFixed(0)}%, CO2: ${s.co2 ?? "N/A"} ppm` : ""}`;
     }).join("\n");
 
-    const batchSummary = activeBatches.map((b) => {
+    const batchSummary = activeBatches.map((b: any) => {
       const day = b.plantedAt ? Math.floor((Date.now() - b.plantedAt.getTime()) / (1000 * 60 * 60 * 24)) : "?";
       return `  ${b.batchNumber} (${b.cropType}) in ${b.zone.name}: ${b.phase}, day ${day}, health ${b.healthScore ?? "?"}%, est yield ${b.estYieldKg?.toFixed(1) ?? "?"}kg`;
     }).join("\n");
 
-    const decisionSummary = recentDecisions.map((d) => {
+    const decisionSummary = recentDecisions.map((d: any) => {
       const ago = Math.floor((Date.now() - d.timestamp.getTime()) / 3600000);
       return `  [${ago}h ago] ${d.decisionType}: ${d.decision} — ${d.reasoning.slice(0, 100)}`;
     }).join("\n");
 
-    const visionSummary = recentPhotos.map((p) => {
+    const visionSummary = recentPhotos.map((p: any) => {
       const a = p.analysis as Record<string, unknown> | null;
       if (!a) return "";
       return `  Count: ${a.mushroom_count ?? "?"}, Weight: ${a.estimated_weight_g ?? "?"}g, Growth: ${a.growth_rate_cm3_day ?? "?"}cm³/day`;
     }).filter(Boolean).join("\n");
 
-    const historySummary = completedBatches.map((b) => {
+    const historySummary = completedBatches.map((b: any) => {
       const h = b.harvests[0];
       const days = b.plantedAt && b.harvestedAt
         ? Math.floor((b.harvestedAt.getTime() - b.plantedAt.getTime()) / (1000 * 60 * 60 * 24))
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
       return `  ${b.batchNumber}: ${b.cropType}, ${b.actualYieldKg?.toFixed(1) ?? "?"}kg, ${b.actualProfit?.toFixed(0) ?? "?"}kr profit, ${h?.costPerGram?.toFixed(3) ?? "?"}kr/g, ${days}d`;
     }).join("\n");
 
-    const selectedZone = zoneId ? zones.find((z) => z.id === zoneId) : null;
+    const selectedZone = zoneId ? zones.find((z: any) => z.id === zoneId) : null;
 
     const systemPrompt = `You are AgriVision AI, the intelligent assistant for ${orgName}'s farm "${farmName}". You help farmers monitor crops, optimize harvests, and plan production.
 

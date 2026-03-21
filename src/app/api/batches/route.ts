@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
-    const result = batches.map((b) => {
+    const result = batches.map((b: any) => {
       let day: number | null = null;
       let estCycleDays: number | null = null;
       if (b.plantedAt) {

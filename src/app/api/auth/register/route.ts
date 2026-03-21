@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       : slug;
 
     // Create organization + user in a transaction
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const org = await tx.organization.create({
         data: {
           name: orgName,

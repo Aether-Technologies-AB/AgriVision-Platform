@@ -43,7 +43,7 @@ export async function GET() {
       name: farm.name,
       address: farm.address,
       timezone: farm.timezone,
-      zones: farm.zones.map((z) => ({
+      zones: farm.zones.map((z: any) => ({
         ...z,
         activeBatchCount: z._count.batches,
         _count: undefined,

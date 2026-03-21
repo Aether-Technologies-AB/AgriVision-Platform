@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Per-batch profit data
-    const batchProfits = batches.map((b) => {
+    const batchProfits = batches.map((b: any) => {
       const h = b.harvests[0];
       return {
         batchNumber: b.batchNumber,
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       { revenue: number; totalCost: number; profit: number; energyCost: number; substrateCost: number; laborCost: number; count: number }
     >();
 
-    for (const b of batches) {
+    for (const b of batches as any[]) {
       if (!b.harvestedAt) continue;
       const key = `${b.harvestedAt.getFullYear()}-${String(b.harvestedAt.getMonth() + 1).padStart(2, "0")}`;
       const existing = monthlyMap.get(key) || {
@@ -89,18 +89,18 @@ export async function GET(request: NextRequest) {
     const firstHalf = batches.slice(0, mid);
     const secondHalf = batches.slice(mid);
 
-    function avgCostPerGram(arr: typeof batches): number {
-      const costs = arr.flatMap((b) => b.harvests.map((h) => h.costPerGram).filter(Boolean)) as number[];
-      return costs.length > 0 ? costs.reduce((a, b) => a + b, 0) / costs.length : 0;
+    function avgCostPerGram(arr: any[]): number {
+      const costs = arr.flatMap((b: any) => b.harvests.map((h: any) => h.costPerGram).filter(Boolean)) as number[];
+      return costs.length > 0 ? costs.reduce((a: any, b: any) => a + b, 0) / costs.length : 0;
     }
 
-    function avgYield(arr: typeof batches): number {
-      const yields = arr.map((b) => b.actualYieldKg).filter(Boolean) as number[];
-      return yields.length > 0 ? yields.reduce((a, b) => a + b, 0) / yields.length : 0;
+    function avgYield(arr: any[]): number {
+      const yields = arr.map((b: any) => b.actualYieldKg).filter(Boolean) as number[];
+      return yields.length > 0 ? yields.reduce((a: any, b: any) => a + b, 0) / yields.length : 0;
     }
 
-    function totalProfit(arr: typeof batches): number {
-      return arr.reduce((s, b) => s + (b.actualProfit || 0), 0);
+    function totalProfit(arr: any[]): number {
+      return arr.reduce((s: any, b: any) => s + (b.actualProfit || 0), 0);
     }
 
     const cpgFirst = avgCostPerGram(firstHalf);
@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
       select: { costKr: true },
     });
     const aiCostThisMonth = aiDecisions.reduce(
-      (s, d) => s + (d.costKr || 0),
+      (s: number, d: any) => s + (d.costKr || 0),
       0
     );
 
