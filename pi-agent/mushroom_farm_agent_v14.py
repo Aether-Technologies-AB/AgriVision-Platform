@@ -243,11 +243,28 @@ async def _call_tapo(ip, action):
                 print(f"   ❌ Tapo {ip} error: {e}"); return False
     return False
 
+_IP_TO_DEVICE = {
+    PLUG_FAN_IP: ("FAN", "Exhaust Fan"),
+    PLUG_HUMID_IP: ("HUMIDIFIER", "Main Humidifier"),
+    PLUG_LIGHT_IP: ("LIGHT", "Grow Light"),
+}
+
+def _sync_device_state(ip, is_on):
+    """Push device state to cloud (non-blocking, best-effort)."""
+    try:
+        if sync and ip in _IP_TO_DEVICE:
+            device_type, device_name = _IP_TO_DEVICE[ip]
+            sync.push_device_state(device_type, device_name, is_on)
+    except Exception as e:
+        print(f"   ☁️  Device state sync failed: {e}")
+
 async def run_device(ip, duration, icon, label):
     print(f"{icon} {label} ON for {duration}s")
     if await _call_tapo(ip, "on"):
+        _sync_device_state(ip, True)
         await asyncio.sleep(duration)
         await _call_tapo(ip, "off")
+        _sync_device_state(ip, False)
         print(f"{icon} {label} OFF")
 
 async def fan(duration=DEVICE_DURATION):   await run_device(PLUG_FAN_IP,   duration, "🌀", "Fan")
@@ -255,10 +272,12 @@ async def humid(duration=DEVICE_DURATION): await run_device(PLUG_HUMID_IP, durat
 
 async def light(state="on", duration=None):
     if await _call_tapo(PLUG_LIGHT_IP, state):
+        _sync_device_state(PLUG_LIGHT_IP, state == "on")
         print(f"💡 Light {'ON' + (f' for {duration}s' if duration else '') if state=='on' else 'OFF'}")
         if state == "on" and duration:
             await asyncio.sleep(duration)
             await _call_tapo(PLUG_LIGHT_IP, "off")
+            _sync_device_state(PLUG_LIGHT_IP, False)
             print("💡 Light OFF")
 
 # ==================== SENSOR ====================

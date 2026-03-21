@@ -35,9 +35,12 @@ export async function GET(
           where: { zoneId },
           orderBy: { timestamp: "desc" },
         }),
-        // Device states
+        // Device states — only show if updated in the last hour
         prisma.deviceState.findMany({
-          where: { zoneId },
+          where: {
+            zoneId,
+            updatedAt: { gte: new Date(Date.now() - 60 * 60 * 1000) },
+          },
           orderBy: { deviceName: "asc" },
         }),
         // Latest photo
@@ -61,9 +64,13 @@ export async function GET(
           orderBy: { createdAt: "desc" },
         }),
         // Recent AI decisions (last 10)
+        // Include decisions linked to batches in this zone AND unbatched decisions
         prisma.aIDecision.findMany({
           where: {
-            batch: { zoneId },
+            OR: [
+              { batch: { zoneId } },
+              { batchId: null },
+            ],
           },
           orderBy: { timestamp: "desc" },
           take: 10,

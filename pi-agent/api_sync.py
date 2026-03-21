@@ -177,6 +177,30 @@ class AgriVisionSync:
             return result.get("id")
         return None
 
+    # ── Device State ───────────────────────────────────────────
+
+    def push_device_state(
+        self,
+        device_type: str,
+        device_name: str,
+        state: bool,
+    ) -> Optional[str]:
+        """Push a device state change. Returns device state ID or None."""
+        result = self._request(
+            "POST",
+            "/api/agent/device-state",
+            json={
+                "zoneId": self.zone_id,
+                "deviceType": device_type,
+                "deviceName": device_name,
+                "state": state,
+            },
+        )
+        if result:
+            logger.info("Device state pushed: %s %s → %s", device_type, device_name, "ON" if state else "OFF")
+            return result.get("id")
+        return None
+
     # ── Photo Upload ─────────────────────────────────────────────
 
     def push_photo(
