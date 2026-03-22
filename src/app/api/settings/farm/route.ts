@@ -43,6 +43,10 @@ export async function GET() {
       name: farm.name,
       address: farm.address,
       timezone: farm.timezone,
+      electricityPriceKrPerKwh: farm.electricityPriceKrPerKwh,
+      defaultSubstrateCostPerBag: farm.defaultSubstrateCostPerBag,
+      defaultLaborCostPerBatch: farm.defaultLaborCostPerBatch,
+      defaultMarketPrices: farm.defaultMarketPrices,
       zones: farm.zones.map((z: any) => ({
         ...z,
         activeBatchCount: z._count.batches,
@@ -62,7 +66,11 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    const { name, address, timezone } = await request.json();
+    const {
+      name, address, timezone,
+      electricityPriceKrPerKwh, defaultSubstrateCostPerBag,
+      defaultLaborCostPerBatch, defaultMarketPrices,
+    } = await request.json();
 
     const farm = await prisma.farm.findFirst({
       where: { organizationId: session.user.organizationId },
@@ -78,6 +86,10 @@ export async function PATCH(request: NextRequest) {
         ...(name !== undefined && { name }),
         ...(address !== undefined && { address }),
         ...(timezone !== undefined && { timezone }),
+        ...(electricityPriceKrPerKwh !== undefined && { electricityPriceKrPerKwh }),
+        ...(defaultSubstrateCostPerBag !== undefined && { defaultSubstrateCostPerBag }),
+        ...(defaultLaborCostPerBatch !== undefined && { defaultLaborCostPerBatch }),
+        ...(defaultMarketPrices !== undefined && { defaultMarketPrices }),
       },
     });
 

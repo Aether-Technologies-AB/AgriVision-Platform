@@ -491,6 +491,7 @@ export default function BatchDetailPage() {
         open={harvestOpen}
         onClose={() => setHarvestOpen(false)}
         batchId={id}
+        cropType={batch?.cropType}
         onCreated={fetchBatch}
       />
     </div>

@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { X, Loader2 } from "lucide-react";
 
 export default function HarvestForm({
   open,
   onClose,
   batchId,
+  cropType,
   onCreated,
 }: {
   open: boolean;
   onClose: () => void;
   batchId: string;
+  cropType?: string;
   onCreated: () => void;
 }) {
   const [weightKg, setWeightKg] = useState<number>(0);
@@ -22,6 +24,47 @@ export default function HarvestForm({
   const [laborCost, setLaborCost] = useState<number>(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [prefilled, setPrefilled] = useState(false);
+
+  // Pre-fill costs from farm defaults + batch + energy readings
+  useEffect(() => {
+    if (!open || prefilled) return;
+
+    // Fetch farm defaults for market price
+    fetch("/api/settings/farm")
+      .then((r) => r.json())
+      .then((farm) => {
+        if (farm.defaultMarketPrices && cropType) {
+          const price = farm.defaultMarketPrices[cropType];
+          if (price) setPricePerKg(price);
+        }
+      })
+      .catch(() => {});
+
+    // Fetch batch details for substrate/labor costs
+    fetch(`/api/batches/${batchId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.substrateCost) setSubstrateCost(data.substrateCost);
+        if (data.laborCost) setLaborCost(data.laborCost);
+      })
+      .catch(() => {});
+
+    // Fetch energy cost
+    fetch(`/api/batches/${batchId}/energy-cost`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.energyCostKr) setEnergyCost(data.energyCostKr);
+      })
+      .catch(() => {});
+
+    setPrefilled(true);
+  }, [open, batchId, cropType, prefilled]);
+
+  // Reset prefilled flag when form closes
+  useEffect(() => {
+    if (!open) setPrefilled(false);
+  }, [open]);
 
   const computed = useMemo(() => {
     const revenue = weightKg * pricePerKg;
@@ -109,15 +152,17 @@ export default function HarvestForm({
                 onChange={(e) => setQualityGrade(e.target.value)}
                 className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text focus:border-green focus:outline-none"
               >
-                <option value="A">A — Premium</option>
-                <option value="B">B — Standard</option>
-                <option value="C">C — Below Standard</option>
+                <option value="A">A - Premium</option>
+                <option value="B">B - Standard</option>
+                <option value="C">C - Below Standard</option>
               </select>
             </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-mid">Price per kg (kr)</label>
+            <label className="mb-1 block text-xs font-medium text-text-mid">
+              Price per kg (kr){cropType ? ` - ${cropType}` : ""}
+            </label>
             <input
               type="number"
               step="1"

@@ -78,6 +78,8 @@ export async function GET(
       actualProfit: batch.actualProfit,
       qualityGrade: batch.qualityGrade,
       healthScore: batch.healthScore,
+      substrateCost: batch.substrateCost,
+      laborCost: batch.laborCost,
       notes: batch.notes,
       createdAt: batch.createdAt,
       zone: { id: batch.zone.id, name: batch.zone.name },

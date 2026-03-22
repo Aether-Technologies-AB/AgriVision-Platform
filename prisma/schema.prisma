@@ -73,8 +73,16 @@ model Farm {
   organization   Organization @relation(fields: [organizationId], references: [id])
   createdAt      DateTime     @default(now())
 
-  zones   Zone[]
-  apiKeys ApiKey[]
+  // Cost defaults
+  electricityPriceKrPerKwh  Float @default(1.50)
+  defaultSubstrateCostPerBag Float @default(15.0)
+  defaultLaborCostPerBatch   Float @default(200.0)
+  defaultMarketPrices        Json? // e.g. {"oyster_blue": 150, "lions_mane": 250}
+
+  zones          Zone[]
+  apiKeys        ApiKey[]
+  deviceStates   DeviceState[]
+  energyReadings EnergyReading[]
 
   @@index([organizationId])
 }
@@ -102,6 +110,7 @@ model Zone {
   photos         Photo[]
   deviceStates   DeviceState[]
   commands       Command[]
+  energyReadings EnergyReading[]
 
   @@index([farmId])
 }
@@ -131,6 +140,9 @@ model Batch {
   cropType  String
   substrate String     @default("straw")
   bagCount  Int
+
+  substrateCost Float?
+  laborCost     Float?
 
   phase       BatchPhase @default(PLANNED)
   plantedAt   DateTime?
@@ -291,10 +303,18 @@ enum EventStatus {
   OVERDUE
 }
 
+enum DeviceScope {
+  ZONE
+  FARM
+}
+
 model DeviceState {
   id     String @id @default(cuid())
-  zoneId String
-  zone   Zone   @relation(fields: [zoneId], references: [id])
+  farmId String
+  farm   Farm   @relation(fields: [farmId], references: [id])
+  zoneId String?
+  zone   Zone?  @relation(fields: [zoneId], references: [id])
+  scope  DeviceScope @default(ZONE)
 
   deviceType  DeviceType
   deviceName  String
@@ -303,7 +323,8 @@ model DeviceState {
 
   updatedAt DateTime @updatedAt
 
-  @@unique([zoneId, deviceType, deviceName])
+  @@unique([farmId, scope, deviceType, deviceName])
+  @@index([farmId])
   @@index([zoneId])
 }
 
@@ -313,6 +334,23 @@ enum DeviceType {
   LIGHT
   HEATER
   PUMP
+}
+
+model EnergyReading {
+  id     String @id @default(cuid())
+  farmId String
+  farm   Farm   @relation(fields: [farmId], references: [id])
+  zoneId String?
+  zone   Zone?  @relation(fields: [zoneId], references: [id])
+
+  deviceName String
+  kWh        Float
+  costKr     Float?
+
+  timestamp DateTime @default(now())
+
+  @@index([farmId, timestamp])
+  @@index([zoneId, timestamp])
 }
 
 model Command {

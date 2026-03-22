@@ -1,12 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2, CheckSquare, Square } from "lucide-react";
 
 interface Zone {
   id: string;
   name: string;
-  farm: { name: string };
+  farm: { id: string; name: string };
+}
+
+interface FarmDefaults {
+  defaultSubstrateCostPerBag: number;
+  defaultLaborCostPerBatch: number;
 }
 
 const cropOptions = [
@@ -35,7 +40,7 @@ export default function BatchForm({
   onCreated: () => void;
 }) {
   const [zones, setZones] = useState<Zone[]>([]);
-  const [zoneId, setZoneId] = useState("");
+  const [selectedZoneIds, setSelectedZoneIds] = useState<string[]>([]);
   const [cropType, setCropType] = useState("oyster_blue");
   const [customCrop, setCustomCrop] = useState("");
   const [substrate, setSubstrate] = useState("straw");
@@ -43,6 +48,8 @@ export default function BatchForm({
   const [bagCount, setBagCount] = useState(10);
   const [plantedAt, setPlantedAt] = useState("");
   const [notes, setNotes] = useState("");
+  const [substrateCost, setSubstrateCost] = useState("");
+  const [laborCost, setLaborCost] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -52,12 +59,38 @@ export default function BatchForm({
         .then((r) => r.json())
         .then((d) => {
           setZones(d.zones || []);
-          if (d.zones?.length > 0 && !zoneId) setZoneId(d.zones[0].id);
+          if (d.zones?.length > 0 && selectedZoneIds.length === 0) {
+            setSelectedZoneIds([d.zones[0].id]);
+          }
         });
+      fetch("/api/settings/farm")
+        .then((r) => r.json())
+        .then((d: FarmDefaults) => {
+          if (d.defaultSubstrateCostPerBag) setSubstrateCost(String(d.defaultSubstrateCostPerBag));
+          if (d.defaultLaborCostPerBatch) setLaborCost(String(d.defaultLaborCostPerBatch));
+        })
+        .catch(() => {});
     }
-  }, [open, zoneId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
+
+  const allSelected = zones.length > 0 && selectedZoneIds.length === zones.length;
+
+  function toggleZone(id: string) {
+    setSelectedZoneIds((prev) =>
+      prev.includes(id) ? prev.filter((z) => z !== id) : [...prev, id]
+    );
+  }
+
+  function toggleAll() {
+    if (allSelected) {
+      setSelectedZoneIds([]);
+    } else {
+      setSelectedZoneIds(zones.map((z) => z.id));
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -66,8 +99,8 @@ export default function BatchForm({
     const finalCrop = cropType === "custom" ? customCrop : cropType;
     const finalSubstrate = substrate === "custom" ? customSubstrate : substrate;
 
-    if (!zoneId || !finalCrop) {
-      setError("Zone and crop type are required");
+    if (selectedZoneIds.length === 0 || !finalCrop) {
+      setError("At least one zone and crop type are required");
       return;
     }
     if (bagCount < 1) {
@@ -81,12 +114,14 @@ export default function BatchForm({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          zoneId,
+          zoneIds: selectedZoneIds,
           cropType: finalCrop,
           substrate: finalSubstrate,
           bagCount,
           plantedAt: plantedAt || null,
           notes: notes || null,
+          substrateCost: substrateCost ? Number(substrateCost) : null,
+          laborCost: laborCost ? Number(laborCost) : null,
         }),
       });
 
@@ -98,12 +133,14 @@ export default function BatchForm({
 
       onCreated();
       onClose();
-      // Reset form
       setCropType("oyster_blue");
       setSubstrate("straw");
       setBagCount(10);
       setPlantedAt("");
       setNotes("");
+      setSelectedZoneIds([]);
+      setSubstrateCost("");
+      setLaborCost("");
     } catch {
       setError("Something went wrong");
     } finally {
@@ -111,9 +148,16 @@ export default function BatchForm({
     }
   }
 
+  const CheckIcon = ({ checked }: { checked: boolean }) =>
+    checked ? (
+      <CheckSquare className="h-4 w-4 text-green" />
+    ) : (
+      <Square className="h-4 w-4 text-text-dim" />
+    );
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-xl border border-border bg-bg-card shadow-2xl">
+      <div className="w-full max-w-md rounded-xl border border-border bg-bg-card shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h2 className="text-lg font-semibold text-text">New Batch</h2>
           <button onClick={onClose} className="text-text-dim hover:text-text">
@@ -128,19 +172,33 @@ export default function BatchForm({
             </div>
           )}
 
+          {/* Zone multi-select */}
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-mid">Zone</label>
-            <select
-              value={zoneId}
-              onChange={(e) => setZoneId(e.target.value)}
-              className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text focus:border-green focus:outline-none"
-            >
+            <label className="mb-1 block text-xs font-medium text-text-mid">
+              Zones ({selectedZoneIds.length} selected)
+            </label>
+            <div className="rounded-lg border border-border bg-bg p-2 space-y-1 max-h-36 overflow-y-auto">
+              <button
+                type="button"
+                onClick={toggleAll}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-text hover:bg-green/5"
+              >
+                <CheckIcon checked={allSelected} />
+                <span className="font-medium">All Zones</span>
+              </button>
+              <div className="mx-1 border-t border-border" />
               {zones.map((z) => (
-                <option key={z.id} value={z.id}>
-                  {z.farm.name} / {z.name}
-                </option>
+                <button
+                  key={z.id}
+                  type="button"
+                  onClick={() => toggleZone(z.id)}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-text hover:bg-green/5"
+                >
+                  <CheckIcon checked={selectedZoneIds.includes(z.id)} />
+                  {z.name}
+                </button>
               ))}
-            </select>
+            </div>
           </div>
 
           <div>
@@ -209,6 +267,34 @@ export default function BatchForm({
             </div>
           </div>
 
+          {/* Cost defaults */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-text-mid">Substrate Cost (kr/bag)</label>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={substrateCost}
+                onChange={(e) => setSubstrateCost(e.target.value)}
+                placeholder="From defaults"
+                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-text-dim focus:border-green focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-text-mid">Labor Cost (kr/batch)</label>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={laborCost}
+                onChange={(e) => setLaborCost(e.target.value)}
+                placeholder="From defaults"
+                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-text-dim focus:border-green focus:outline-none"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="mb-1 block text-xs font-medium text-text-mid">Notes (optional)</label>
             <textarea
@@ -234,7 +320,9 @@ export default function BatchForm({
               className="flex items-center gap-2 rounded-lg bg-green px-4 py-2 text-sm font-semibold text-bg hover:bg-green-bright disabled:opacity-50"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              Create Batch
+              {selectedZoneIds.length > 1
+                ? `Create ${selectedZoneIds.length} Batches`
+                : "Create Batch"}
             </button>
           </div>
         </form>

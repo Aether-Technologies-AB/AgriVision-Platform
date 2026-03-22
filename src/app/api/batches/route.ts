@@ -85,30 +85,36 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { zoneId, cropType, substrate, bagCount, plantedAt, notes } =
-      await request.json();
+    const body = await request.json();
+    const { cropType, substrate, bagCount, plantedAt, notes, substrateCost, laborCost } = body;
 
-    if (!zoneId || !cropType || !bagCount || bagCount < 1) {
+    // Support both single zoneId and multi zoneIds
+    const zoneIds: string[] = body.zoneIds || (body.zoneId ? [body.zoneId] : []);
+
+    if (zoneIds.length === 0 || !cropType || !bagCount || bagCount < 1) {
       return NextResponse.json(
-        { error: "zoneId, cropType, and bagCount (>= 1) are required" },
+        { error: "At least one zone, cropType, and bagCount (>= 1) are required" },
         { status: 400 }
       );
     }
 
-    // Verify zone belongs to user's org
-    const zone = await prisma.zone.findUnique({
-      where: { id: zoneId },
+    // Verify all zones belong to user's org
+    const zones = await prisma.zone.findMany({
+      where: { id: { in: zoneIds } },
       include: { farm: true },
     });
 
-    if (!zone || zone.farm.organizationId !== session.user.organizationId) {
-      return NextResponse.json(
-        { error: "Zone not found or access denied" },
-        { status: 403 }
-      );
+    if (zones.length !== zoneIds.length) {
+      return NextResponse.json({ error: "One or more zones not found" }, { status: 404 });
     }
 
-    // Generate batch number — find highest existing number this year
+    for (const z of zones) {
+      if (z.farm.organizationId !== session.user.organizationId) {
+        return NextResponse.json({ error: "Access denied to one or more zones" }, { status: 403 });
+      }
+    }
+
+    // Generate batch numbers — find highest existing number this year
     const year = new Date().getFullYear();
     const prefix = `B-${year}-`;
     const latest = await prisma.batch.findFirst({
@@ -116,25 +122,35 @@ export async function POST(request: NextRequest) {
       orderBy: { batchNumber: "desc" },
       select: { batchNumber: true },
     });
-    const lastNum = latest
+    let lastNum = latest
       ? parseInt(latest.batchNumber.replace(prefix, ""), 10)
       : 0;
-    const batchNumber = `${prefix}${String(lastNum + 1).padStart(3, "0")}`;
 
-    const batch = await prisma.batch.create({
-      data: {
-        batchNumber,
-        zoneId,
-        cropType,
-        substrate: substrate || "straw",
-        bagCount,
-        phase: "PLANNED",
-        plantedAt: plantedAt ? new Date(plantedAt) : null,
-        notes: notes || null,
-      },
-    });
+    const created = [];
+    for (const zId of zoneIds) {
+      lastNum++;
+      const batchNumber = `${prefix}${String(lastNum).padStart(3, "0")}`;
+      const batch = await prisma.batch.create({
+        data: {
+          batchNumber,
+          zoneId: zId,
+          cropType,
+          substrate: substrate || "straw",
+          bagCount,
+          substrateCost: substrateCost ?? null,
+          laborCost: laborCost ?? null,
+          phase: "PLANNED",
+          plantedAt: plantedAt ? new Date(plantedAt) : null,
+          notes: notes || null,
+        },
+      });
+      created.push({ id: batch.id, batchNumber: batch.batchNumber });
+    }
 
-    return NextResponse.json({ id: batch.id, batchNumber: batch.batchNumber }, { status: 201 });
+    return NextResponse.json(
+      { batches: created, id: created[0].id, batchNumber: created[0].batchNumber },
+      { status: 201 }
+    );
   } catch (err) {
     console.error("Batch create error:", err);
     return NextResponse.json(

@@ -31,6 +31,10 @@ interface FarmData {
   name: string;
   address: string | null;
   timezone: string;
+  electricityPriceKrPerKwh: number;
+  defaultSubstrateCostPerBag: number;
+  defaultLaborCostPerBatch: number;
+  defaultMarketPrices: Record<string, number> | null;
   zones: {
     id: string;
     name: string;

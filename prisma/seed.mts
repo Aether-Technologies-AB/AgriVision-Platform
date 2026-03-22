@@ -17,6 +17,7 @@ async function main() {
   console.log("Seeding database...");
 
   // Clean existing data
+  await prisma.energyReading.deleteMany();
   await prisma.command.deleteMany();
   await prisma.deviceState.deleteMany();
   await prisma.harvest.deleteMany();
@@ -83,6 +84,16 @@ async function main() {
       address: "Sveavägen 42, Stockholm",
       timezone: "Europe/Stockholm",
       organizationId: org.id,
+      electricityPriceKrPerKwh: 1.50,
+      defaultSubstrateCostPerBag: 15.0,
+      defaultLaborCostPerBatch: 200.0,
+      defaultMarketPrices: {
+        oyster_blue: 150,
+        oyster_pink: 160,
+        oyster_yellow: 155,
+        lions_mane: 250,
+        shiitake: 180,
+      },
     },
   });
 
@@ -148,6 +159,8 @@ async function main() {
       cropType: "oyster_blue",
       substrate: "straw",
       bagCount: 12,
+      substrateCost: 15.0,
+      laborCost: 200.0,
       phase: "FRUITING",
       plantedAt: new Date(now.getTime() - 22 * 24 * 60 * 60 * 1000),
       fruitingAt: new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000),
@@ -166,6 +179,8 @@ async function main() {
       cropType: "lions_mane",
       substrate: "sawdust",
       bagCount: 8,
+      substrateCost: 15.0,
+      laborCost: 200.0,
       phase: "COLONIZATION",
       plantedAt: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000),
       estHarvestDate: new Date(now.getTime() + 20 * 24 * 60 * 60 * 1000),
@@ -421,17 +436,53 @@ async function main() {
   });
   console.log("Created 2 harvests");
 
-  // 11. Device states
+  // 11. Device states (with scope)
   const deviceStates = [
-    { zoneId: zoneA.id, deviceType: "HUMIDIFIER" as const, deviceName: "Main Humidifier", state: true, lastToggled: new Date(now.getTime() - 15 * 60 * 1000) },
-    { zoneId: zoneA.id, deviceType: "FAN" as const, deviceName: "Exhaust Fan", state: false, lastToggled: new Date(now.getTime() - 45 * 60 * 1000) },
-    { zoneId: zoneA.id, deviceType: "LIGHT" as const, deviceName: "Grow Light", state: true, lastToggled: new Date(now.getTime() - 2 * 60 * 60 * 1000) },
-    { zoneId: zoneB.id, deviceType: "HUMIDIFIER" as const, deviceName: "Main Humidifier", state: false, lastToggled: new Date(now.getTime() - 60 * 60 * 1000) },
-    { zoneId: zoneB.id, deviceType: "FAN" as const, deviceName: "Exhaust Fan", state: false, lastToggled: new Date(now.getTime() - 2 * 60 * 60 * 1000) },
-    { zoneId: zoneB.id, deviceType: "LIGHT" as const, deviceName: "Grow Light", state: false, lastToggled: new Date(now.getTime() - 3 * 60 * 60 * 1000) },
+    // Farm-wide humidifier
+    { farmId: farm.id, zoneId: null, scope: "FARM" as const, deviceType: "HUMIDIFIER" as const, deviceName: "Main Humidifier", state: true, lastToggled: new Date(now.getTime() - 15 * 60 * 1000) },
+    // Zone-specific devices
+    { farmId: farm.id, zoneId: zoneA.id, scope: "ZONE" as const, deviceType: "FAN" as const, deviceName: "Exhaust Fan", state: false, lastToggled: new Date(now.getTime() - 45 * 60 * 1000) },
+    { farmId: farm.id, zoneId: zoneA.id, scope: "ZONE" as const, deviceType: "LIGHT" as const, deviceName: "Grow Light", state: true, lastToggled: new Date(now.getTime() - 2 * 60 * 60 * 1000) },
+    { farmId: farm.id, zoneId: zoneB.id, scope: "ZONE" as const, deviceType: "FAN" as const, deviceName: "Exhaust Fan", state: false, lastToggled: new Date(now.getTime() - 2 * 60 * 60 * 1000) },
+    { farmId: farm.id, zoneId: zoneB.id, scope: "ZONE" as const, deviceType: "LIGHT" as const, deviceName: "Grow Light", state: false, lastToggled: new Date(now.getTime() - 3 * 60 * 60 * 1000) },
   ];
   await prisma.deviceState.createMany({ data: deviceStates });
-  console.log("Created 6 device states");
+  console.log("Created 5 device states (1 farm-wide, 4 zone)");
+
+  // 11b. Energy readings (sample data)
+  const energyReadings = [];
+  for (let daysAgo = 20; daysAgo >= 0; daysAgo--) {
+    const ts = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+    // Farm-wide humidifier
+    energyReadings.push({
+      farmId: farm.id,
+      zoneId: null,
+      deviceName: "Main Humidifier",
+      kWh: 0.8 + Math.random() * 0.4,
+      costKr: (0.8 + Math.random() * 0.4) * 1.5,
+      timestamp: ts,
+    });
+    // Zone A light
+    energyReadings.push({
+      farmId: farm.id,
+      zoneId: zoneA.id,
+      deviceName: "Grow Light",
+      kWh: 0.5 + Math.random() * 0.2,
+      costKr: (0.5 + Math.random() * 0.2) * 1.5,
+      timestamp: ts,
+    });
+    // Zone A fan
+    energyReadings.push({
+      farmId: farm.id,
+      zoneId: zoneA.id,
+      deviceName: "Exhaust Fan",
+      kWh: 0.15 + Math.random() * 0.1,
+      costKr: (0.15 + Math.random() * 0.1) * 1.5,
+      timestamp: ts,
+    });
+  }
+  await prisma.energyReading.createMany({ data: energyReadings });
+  console.log(`Created ${energyReadings.length} energy readings`);
 
   // 12. Schedule events
   const scheduleEvents = [

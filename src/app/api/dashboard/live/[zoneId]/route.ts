@@ -35,10 +35,13 @@ export async function GET(
           where: { zoneId },
           orderBy: { timestamp: "desc" },
         }),
-        // Device states — only show if updated in the last hour
+        // Device states — zone-specific + farm-wide, updated in last hour
         prisma.deviceState.findMany({
           where: {
-            zoneId,
+            OR: [
+              { zoneId },
+              { farmId: zone.farmId, scope: "FARM" },
+            ],
             updatedAt: { gte: new Date(Date.now() - 60 * 60 * 1000) },
           },
           orderBy: { deviceName: "asc" },
@@ -136,6 +139,7 @@ export async function GET(
         name: d.deviceName,
         state: d.state,
         lastToggled: d.lastToggled,
+        scope: d.scope,
       })),
       agent: {
         status: zone.agentStatus,

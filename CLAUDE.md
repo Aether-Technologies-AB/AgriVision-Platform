@@ -162,17 +162,18 @@ When a client says "I grow lion's mane," the platform automatically uses lion's 
 
 ```json
 // Request (from Pi, authenticated by API key)
+// Pi already knows the crop type from its batch config — no DB lookup needed
 {
-  "batchId": "clxyz...",
+  "cropType": "oyster_blue",
   "image": "<base64 JPEG>"
 }
 
 // Server logic:
-// 1. Look up batch → cropType "oyster_blue" → model family "oyster"
+// 1. Map cropType to model family ("oyster_blue" → "oyster")
 // 2. Query MLModel for active models where cropType = "oyster"
 // 3. Fetch .onnx from Blob (cached in /tmp after first load)
 // 4. Run onnxruntime-node inference
-// 5. Return results
+// 5. Return results — no batch lookup, no DB dependency
 
 // Response
 {
@@ -191,6 +192,8 @@ When a client says "I grow lion's mane," the platform automatically uses lion's 
   }
 }
 ```
+
+Note: batchId is only needed when *storing* results (POST /api/agent/vision), not when *requesting* predictions. The Pi knows its crop type locally.
 
 ### Model storage
 
@@ -225,13 +228,65 @@ Multi-tenant SaaS:
 - `ApiKey` (scoped to farm, used by Pi agents)
 - `Batch` (core unit — cropType drives automatic model selection)
 - `SensorReading` (time-series: temp, humidity, CO2, VPD)
+- `EnergyReading` (time-series from Tapo P110 smart plugs: device, kWh, cost. Belongs to Zone or Farm depending on device scope)
 - `Photo` (RGB + depth URLs in Blob, ML analysis JSON)
-- `AIDecision` (Claude reasoning, action, cost)
-- `Harvest` (weight, revenue, cost breakdown, profit)
+- `AIDecision` (Claude reasoning, action, cost. Belongs to Batch)
+- `Harvest` (actual weight, revenue, cost breakdown, profit)
 - `ScheduleEvent` (planned events)
-- `DeviceState` (humidifier/fan/light status)
+- `DeviceState` (device status — scope is ZONE or FARM. Lights are per-zone. Humidifier/HVAC may be farm-wide)
 - `Command` (queued for Pi execution)
 - `MLModel` (registry: name, version, cropType, ONNX Blob URL, accuracy, isActive)
+- `FarmDefaults` (default costs and prices per farm: electricity kr/kWh, substrate kr/bag, labor kr/batch, market prices per crop type)
+
+### Device scoping
+
+Not all devices are zone-level. A humidifier or HVAC might serve the entire farm, while lights are per-zone:
+
+```
+DeviceState
+  - farmId (required) — all devices belong to a farm
+  - zoneId (optional) — null for farm-wide devices
+  - scope: ZONE | FARM
+  - deviceType, deviceName, state, lastToggled
+```
+
+When the AI decides "turn on lights in Zone A" → zone-scoped device. When it decides "increase humidity" → might be a farm-scoped humidifier affecting all zones. The dashboard shows farm-level devices in a shared section and zone-level devices under each zone.
+
+### Energy tracking
+
+Tapo P110 smart plugs meter electricity. The Pi reads kWh and pushes to the cloud:
+
+```
+EnergyReading
+  - farmId, zoneId (optional), deviceName
+  - kWh (cumulative or delta)
+  - costKr (calculated: kWh × electricity price from FarmDefaults)
+  - timestamp
+```
+
+Energy cost per batch = sum of EnergyReadings during batch duration for that zone (+ proportional share of farm-wide devices).
+
+### Cost and revenue data sources
+
+| Data | Source | Where entered |
+|---|---|---|
+| Energy (kWh) | Tapo P110 smart plugs | Automatic — Pi pushes to cloud |
+| Energy cost (kr) | kWh × electricity price | Automatic — price from FarmDefaults |
+| Substrate cost | Known by farmer | At batch creation (default from FarmDefaults) |
+| Labor cost | Estimated by farmer | FarmDefaults (kr/batch), overridable per batch |
+| Revenue | Weight × market price | At harvest recording |
+| Market price (kr/kg) | Known by farmer | At harvest (default from FarmDefaults per crop) |
+
+### FarmDefaults (stored in Farm record or separate table)
+
+```
+- electricityPriceKrPerKwh: 1.50 (or integrate Nordpool API later)
+- defaultSubstrateCostPerBag: 15.0
+- defaultLaborCostPerBatch: 200.0
+- defaultMarketPrices: { "oyster_blue": 150, "lions_mane": 250, "shiitake": 180 } (kr/kg)
+```
+
+These auto-fill into batch creation and harvest forms. Can be overridden per batch.
 
 ## Key Domain Concepts
 
@@ -240,6 +295,8 @@ Multi-tenant SaaS:
 **Zone:** A controlled growing environment within a facility — one room, tent, shelf section, or climate area. Each zone has its own hardware (camera, sensors, plugs) and runs one set of environmental conditions at a time. One Pi agent reports to one zone. A zone can hold multiple batches simultaneously if they share the same conditions, but typically one batch per zone.
 
 **Batch:** A crop cycle that happens inside a zone. Has a start and end. Zone A might run Batch B-001 (oyster, 28 days), then B-005 (lion's mane, 35 days), then B-012 (shiitake, 42 days). The batch's cropType drives automatic ML model selection.
+
+**Multi-zone batch creation:** Most of the time, farmers plant the same crop in all zones. The "New Batch" form supports: single zone, multiple zones (checkboxes), or "All Zones" (one click). Selecting multiple zones creates one batch per zone with the same crop, substrate, and bag count — each gets its own batch number (B-2026-010, B-2026-011...) because they track independently. Cost defaults (substrate, labor) auto-fill from FarmDefaults.
 
 **Growth phases:** COLONIZATION → FRUITING → HARVESTING. Colonization = mycelium spreads through substrate (monitoring only). Fruiting = triggered manually ("fruiting start"), mushrooms grow 7-14 days. Harvest timing = profit-optimized by AI.
 
@@ -325,11 +382,14 @@ Steps 1-11 COMPLETE. Platform deployed on Vercel, receiving live Pi data.
 - **Zone Map component** — visual facility overview on dashboard showing all zones with batch maturity gradient (yellow→green). Clickable zones and batches.
 - **Farm selector** in top bar — switch between facilities, all pages filter to selected farm
 - **Top bar "All Zones" view** — zone selector gets "All Zones" option that shows zone map instead of single-zone detail
+- **Multi-zone batch creation** — batch form supports selecting multiple zones or "All Zones" at once, creates one batch per zone with same config
+- **FarmDefaults** — add to Settings → Farm: electricity price (kr/kWh), default substrate cost/bag, default labor cost/batch, default market prices per crop type. Auto-fill into batch and harvest forms.
+- **EnergyReading table + Pi push** — Tapo P110 kWh data pushed by Pi, stored per device, cost auto-calculated from electricity price default
+- **DeviceState scope refactor** — add farmId and scope (ZONE/FARM) to DeviceState. Farm-wide devices (humidifier, HVAC) show in shared section. Zone-specific devices (lights) show per zone.
 - Photo upload fix (handle .npy depth files, verify Blob token)
 - Clean seed data vs real data (dashboard should show real Pi data, not seed placeholders)
 - AI decisions feed: query should show real decisions from Pi, not just seed data
-- Device state sync from Pi (or show "no data" when stale)
-- `POST /api/ml/predict` endpoint (onnxruntime-node) — for when training data is ready
+- `POST /api/ml/predict` endpoint (onnxruntime-node) — Pi sends cropType + image directly, no batchId lookup needed
 - Model upload flow in Settings → Models
 - Pi agent: replace Claude vision calls with /api/ml/predict (when models ready)
 - Smart scheduler: verify Claude API call works with real batch history data
