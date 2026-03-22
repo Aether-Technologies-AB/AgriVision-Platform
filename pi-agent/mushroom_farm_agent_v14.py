@@ -10,8 +10,13 @@
 #     (Telegram, Google Sheets, Google Drive, Flask dashboard, Tapo control)
 #   - Every sync call wrapped in try/except — agent never crashes if cloud
 #     is unreachable
+# ENERGY METERING:
+#   - Reads kWh from Tapo P110 smart plugs after each device toggle
+#   - task_energy_monitor() runs every 30min for continuous tracking
+#   - Pushes to /api/agent/energy with auto-calculated cost (kr)
+#   - All energy calls wrapped in try/except — never crashes
 # ENV:
-#   - API_URL, API_KEY, ZONE_ID loaded from .env file (python-dotenv)
+#   - API_URL, API_KEY, ZONE_ID, FARM_ID loaded from .env file (python-dotenv)
 #   - Falls back to os.environ if .env not present
 #
 import asyncio, anthropic, requests, base64, time, os, gspread, json, threading
@@ -40,6 +45,7 @@ from api_sync import AgriVisionSync
 CLOUD_API_URL = os.environ.get("API_URL", "")
 CLOUD_API_KEY = os.environ.get("API_KEY", "")
 CLOUD_ZONE_ID = os.environ.get("ZONE_ID", "")
+CLOUD_FARM_ID = os.environ.get("FARM_ID", "")
 
 sync = None  # initialized in main() after validation
 
@@ -258,6 +264,34 @@ def _sync_device_state(ip, is_on):
     except Exception as e:
         print(f"   ☁️  Device state sync failed: {e}")
 
+_IP_TO_ENERGY_NAME = {
+    PLUG_FAN_IP: "fan",
+    PLUG_HUMID_IP: "humidifier",
+    PLUG_LIGHT_IP: "light",
+}
+
+async def _read_and_push_energy(ip):
+    """Read energy from Tapo P110 plug and push to cloud. Best-effort, never crashes."""
+    try:
+        if not sync or not CLOUD_FARM_ID:
+            return
+        if _tapo_client is None:
+            return
+        dev = await _tapo_client.p110(ip)
+        usage = await dev.get_energy_usage()
+        # usage typically has: current_power (W), today_energy (Wh), month_energy (Wh)
+        today_wh = getattr(usage, 'today_energy', 0) or 0
+        if hasattr(usage, 'today_energy') and today_wh == 0:
+            # Try dict access if it's a dict-like object
+            if isinstance(usage, dict):
+                today_wh = usage.get('today_energy', 0)
+        today_kwh = today_wh / 1000.0
+        if today_kwh > 0:
+            device_name = _IP_TO_ENERGY_NAME.get(ip, "unknown")
+            sync.push_energy(CLOUD_FARM_ID, CLOUD_ZONE_ID or None, device_name, today_kwh)
+    except Exception as e:
+        print(f"   ⚡ Energy read failed ({ip}): {e}")
+
 async def run_device(ip, duration, icon, label):
     print(f"{icon} {label} ON for {duration}s")
     if await _call_tapo(ip, "on"):
@@ -266,6 +300,7 @@ async def run_device(ip, duration, icon, label):
         await _call_tapo(ip, "off")
         _sync_device_state(ip, False)
         print(f"{icon} {label} OFF")
+        await _read_and_push_energy(ip)
 
 async def fan(duration=DEVICE_DURATION):   await run_device(PLUG_FAN_IP,   duration, "🌀", "Fan")
 async def humid(duration=DEVICE_DURATION): await run_device(PLUG_HUMID_IP, duration, "💧", "Humidifier")
@@ -274,11 +309,14 @@ async def light(state="on", duration=None):
     if await _call_tapo(PLUG_LIGHT_IP, state):
         _sync_device_state(PLUG_LIGHT_IP, state == "on")
         print(f"💡 Light {'ON' + (f' for {duration}s' if duration else '') if state=='on' else 'OFF'}")
+        if state == "off":
+            await _read_and_push_energy(PLUG_LIGHT_IP)
         if state == "on" and duration:
             await asyncio.sleep(duration)
             await _call_tapo(PLUG_LIGHT_IP, "off")
             _sync_device_state(PLUG_LIGHT_IP, False)
             print("💡 Light OFF")
+            await _read_and_push_energy(PLUG_LIGHT_IP)
 
 # ==================== SENSOR ====================
 def get_sensor():
@@ -837,6 +875,37 @@ async def task_vision():
         interval = VISION_INTERVAL_COLONIZATION if GROWTH_PHASE=="colonization" else VISION_INTERVAL_FRUITING
         await asyncio.sleep(interval)
 
+# ==================== ENERGY MONITORING (v14) ====================
+
+ENERGY_INTERVAL = 1800  # 30 minutes
+
+async def task_energy_monitor():
+    """Reads cumulative kWh from each Tapo P110 plug every 30 min and pushes to cloud."""
+    global _tapo_client
+    await asyncio.sleep(60)  # Wait for Tapo client to be initialized
+    while True:
+        try:
+            if sync and CLOUD_FARM_ID:
+                if _tapo_client is None:
+                    _tapo_client = ApiClient(TAPO_EMAIL, TAPO_PASSWORD)
+                for ip, device_name in _IP_TO_ENERGY_NAME.items():
+                    try:
+                        dev = await _tapo_client.p110(ip)
+                        usage = await dev.get_energy_usage()
+                        today_wh = getattr(usage, 'today_energy', 0) or 0
+                        if isinstance(usage, dict):
+                            today_wh = usage.get('today_energy', today_wh)
+                        today_kwh = today_wh / 1000.0
+                        if today_kwh > 0:
+                            sync.push_energy(CLOUD_FARM_ID, CLOUD_ZONE_ID or None, device_name, today_kwh)
+                            print(f"   ⚡ {device_name}: {today_kwh:.3f} kWh")
+                    except Exception as e:
+                        print(f"   ⚡ Energy read failed ({device_name}): {e}")
+                print(f"⚡ Energy monitor cycle complete — {datetime.now().strftime('%H:%M')}")
+        except Exception as e:
+            print(f"⚡ Energy monitor error: {e}")
+        await asyncio.sleep(ENERGY_INTERVAL)
+
 # ==================== CLOUD COMMANDS (v14) ====================
 
 def handle_cloud_commands():
@@ -1050,7 +1119,8 @@ async def main():
     print(f"📊 Phase: {GROWTH_PHASE.upper()} | Sensor: {ESP32_URL}")
     print(f"💧 Durations: device={DEVICE_DURATION}s fresh_air={FRESH_AIR_DURATION}s cooldown={FAN_COOLDOWN}s")
     print(f"📸 Photos: {PHOTO_INTERVAL//3600}h | 👁️ Vision: col={VISION_INTERVAL_COLONIZATION//3600}h fruit={VISION_INTERVAL_FRUITING//3600}h")
-    print(f"☁️  Cloud: {'CONNECTED' if sync else 'NOT CONFIGURED'}\n")
+    print(f"☁️  Cloud: {'CONNECTED' if sync else 'NOT CONFIGURED'} | Farm: {CLOUD_FARM_ID[:12] + '...' if CLOUD_FARM_ID else 'N/A'}")
+    print(f"⚡ Energy: every {ENERGY_INTERVAL//60}min | Plugs: fan={PLUG_FAN_IP} humid={PLUG_HUMID_IP} light={PLUG_LIGHT_IP}\n")
     init_sheets()
     s = get_sensor()
     if s: print(f"✅ ESP32: {s['temperature']}°C {s['humidity']}%\n")
@@ -1058,10 +1128,11 @@ async def main():
 
     # Launch all tasks independently
     tasks = [
-        asyncio.create_task(task_sensor_control(), name="sensor"),
-        asyncio.create_task(task_fresh_air(),      name="fresh_air"),
-        asyncio.create_task(task_photos(),         name="photos"),
-        asyncio.create_task(task_vision(),         name="vision"),
+        asyncio.create_task(task_sensor_control(),  name="sensor"),
+        asyncio.create_task(task_fresh_air(),       name="fresh_air"),
+        asyncio.create_task(task_photos(),          name="photos"),
+        asyncio.create_task(task_vision(),          name="vision"),
+        asyncio.create_task(task_energy_monitor(),  name="energy"),
     ]
 
     # Main loop: Telegram + cloud commands + reminders

@@ -6,6 +6,7 @@ import KPICards from "@/components/analytics/KPICards";
 import RevenueChart from "@/components/analytics/RevenueChart";
 import YieldCurve from "@/components/analytics/YieldCurve";
 import BatchComparison from "@/components/analytics/BatchComparison";
+import EnergyAnalytics from "@/components/analytics/EnergyAnalytics";
 
 interface ProfitData {
   batchProfits: {
@@ -92,23 +93,6 @@ export default function AnalyticsPage() {
     );
   }
 
-  // Compute energy efficiency stats
-  const completedBatches = yieldData?.batches || [];
-  const totalEnergyKr = completedBatches.reduce(
-    (s, b) => s + (b.energyCost || 0),
-    0
-  );
-  const totalYieldKg = completedBatches.reduce(
-    (s, b) => s + (b.yieldKg || 0),
-    0
-  );
-  const totalRevenue = completedBatches.reduce(
-    (s, b) => s + (b.revenue || 0),
-    0
-  );
-  const energyPerKg = totalYieldKg > 0 ? totalEnergyKr / totalYieldKg : 0;
-  const energyPctRevenue = totalRevenue > 0 ? (totalEnergyKr / totalRevenue) * 100 : 0;
-
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -154,54 +138,14 @@ export default function AnalyticsPage() {
       {/* Row 4: Batch Comparison Table */}
       <BatchComparison data={yieldData?.batches || []} />
 
-      {/* Row 5: Energy Efficiency */}
-      {completedBatches.length > 0 && totalEnergyKr > 0 && (
-        <div className="rounded-xl border border-border bg-bg-card p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Zap className="h-4 w-4 text-amber" />
-            <h3 className="text-sm font-medium text-text">
-              Energy Efficiency
-            </h3>
-          </div>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <div>
-              <p className="text-xs text-text-dim">Avg Energy Cost / kg</p>
-              <p className="font-mono text-xl font-semibold text-text">
-                {energyPerKg.toFixed(1)}{" "}
-                <span className="text-sm text-text-dim">kr/kg</span>
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-text-dim">Energy as % of Revenue</p>
-              <p className="font-mono text-xl font-semibold text-text">
-                {energyPctRevenue.toFixed(1)}
-                <span className="text-sm text-text-dim">%</span>
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-text-dim">Total Energy Cost</p>
-              <p className="font-mono text-xl font-semibold text-text">
-                {totalEnergyKr.toFixed(0)}{" "}
-                <span className="text-sm text-text-dim">kr</span>
-              </p>
-            </div>
-          </div>
+      {/* Row 5: Energy Analytics */}
+      <div>
+        <div className="mb-3 flex items-center gap-2">
+          <Zap className="h-5 w-5 text-amber" />
+          <h2 className="text-lg font-semibold text-text">Energy</h2>
         </div>
-      )}
-
-      {completedBatches.length === 0 && (
-        <div className="rounded-xl border border-border bg-bg-card p-4">
-          <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4 text-amber" />
-            <h3 className="text-sm font-medium text-text">
-              Energy Efficiency
-            </h3>
-          </div>
-          <p className="mt-2 text-sm text-text-dim">
-            Complete batches with energy cost data to see efficiency metrics.
-          </p>
-        </div>
-      )}
+        <EnergyAnalytics />
+      </div>
     </div>
   );
 }

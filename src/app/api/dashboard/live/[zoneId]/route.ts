@@ -58,22 +58,18 @@ export async function GET(
             timestamp: true,
           },
         }),
-        // Active batch (not HARVESTED, CANCELLED, or PLANNED)
+        // Active batch — prioritize by most recent plantedAt (real batches first)
         prisma.batch.findFirst({
           where: {
             zoneId,
             phase: { in: ["COLONIZATION", "FRUITING", "READY_TO_HARVEST"] },
           },
-          orderBy: { createdAt: "desc" },
+          orderBy: { plantedAt: "desc" },
         }),
-        // Recent AI decisions (last 10)
-        // Include decisions linked to batches in this zone AND unbatched decisions
+        // Recent AI decisions — only from batches in this zone, newest first
         prisma.aIDecision.findMany({
           where: {
-            OR: [
-              { batch: { zoneId } },
-              { batchId: null },
-            ],
+            batch: { zoneId },
           },
           orderBy: { timestamp: "desc" },
           take: 10,
@@ -88,6 +84,20 @@ export async function GET(
           },
         }),
       ]);
+
+    // Today's energy for this zone
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const energyToday = await prisma.energyReading.aggregate({
+      where: {
+        OR: [
+          { zoneId },
+          { farmId: zone.farmId, zoneId: null },
+        ],
+        timestamp: { gte: todayStart },
+      },
+      _sum: { kWh: true, costKr: true },
+    });
 
     // Get sensor reading from ~1h ago for trend comparison
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
@@ -162,6 +172,10 @@ export async function GET(
           }
         : null,
       recentDecisions,
+      energy: {
+        todayKwh: Math.round((energyToday._sum.kWh || 0) * 1000) / 1000,
+        todayCostKr: Math.round((energyToday._sum.costKr || 0) * 100) / 100,
+      },
     });
   } catch (err) {
     console.error("Dashboard live error:", err);

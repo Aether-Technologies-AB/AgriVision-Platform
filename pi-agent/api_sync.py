@@ -265,6 +265,30 @@ class AgriVisionSync:
             return True
         return False
 
+    # ── Energy Readings ─────────────────────────────────────────
+
+    def push_energy(
+        self,
+        farm_id: str,
+        zone_id: Optional[str],
+        device_name: str,
+        kwh: float,
+    ) -> Optional[str]:
+        """Push an energy reading from a Tapo P110 plug. Returns reading ID or None."""
+        payload: dict[str, Any] = {
+            "farmId": farm_id,
+            "deviceName": device_name,
+            "kWh": kwh,
+        }
+        if zone_id:
+            payload["zoneId"] = zone_id
+
+        result = self._request("POST", "/api/agent/energy", json=payload)
+        if result:
+            logger.info("Energy pushed: %s %.3f kWh", device_name, kwh)
+            return result.get("id")
+        return None
+
     # ── Model Updates ────────────────────────────────────────────
 
     def check_models(self, crop_type: str = "oyster") -> list[dict]:

@@ -13,6 +13,7 @@ import {
   Clock,
   Building2,
   LayoutGrid,
+  Zap,
 } from "lucide-react";
 import SensorCard from "@/components/dashboard/SensorCard";
 import EnvironmentChart from "@/components/dashboard/EnvironmentChart";
@@ -20,6 +21,7 @@ import ActiveBatchCard from "@/components/dashboard/ActiveBatchCard";
 import CameraFeed from "@/components/dashboard/CameraFeed";
 import AIDecisionFeed from "@/components/dashboard/AIDecisionFeed";
 import DeviceControl from "@/components/dashboard/DeviceControl";
+import EnergyChart from "@/components/dashboard/EnergyChart";
 import ZoneMap from "@/components/dashboard/ZoneMap";
 import { usePolling } from "@/lib/use-polling";
 
@@ -112,6 +114,10 @@ interface LiveData {
     costKr: number | null;
     timestamp: string;
   }[];
+  energy: {
+    todayKwh: number;
+    todayCostKr: number;
+  };
 }
 
 function formatLastSeen(ts: string | null): string {
@@ -375,7 +381,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
           {/* Left column - 3/5 */}
           <div className="space-y-4 lg:col-span-3">
-            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
               <SensorCard
                 label="Temperature"
                 value={live?.sensor?.temperature ?? null}
@@ -414,9 +420,28 @@ export default function DashboardPage() {
                 goodRange={[0.3, 0.8]}
                 warnRange={[0.2, 1.0]}
               />
+              {/* Energy card — today's consumption */}
+              <div className="rounded-xl border border-border bg-bg-card p-3">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <Zap className="h-3.5 w-3.5 text-amber" />
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-text-dim">
+                    Energy Today
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1">
+                  <span className="font-mono text-2xl font-semibold text-text">
+                    {live?.energy?.todayKwh?.toFixed(2) ?? "--"}
+                  </span>
+                  <span className="text-xs text-text-dim">kWh</span>
+                </div>
+                <p className="mt-0.5 text-[10px] text-text-dim">
+                  {live?.energy?.todayCostKr?.toFixed(1) ?? "--"} kr
+                </p>
+              </div>
             </div>
 
             <EnvironmentChart zoneId={selectedZoneId} />
+            <EnergyChart zoneId={selectedZoneId} />
             <ActiveBatchCard batch={live?.activeBatch ?? null} />
           </div>
 
