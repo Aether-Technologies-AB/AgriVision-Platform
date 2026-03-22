@@ -92,7 +92,7 @@ export default function BatchComparison({ data }: { data: BatchData[] }) {
               <th className="px-4 py-3 text-left"><SH label="Cost" field="totalCost" /></th>
               <th className="px-4 py-3 text-left"><SH label="Profit" field="profit" /></th>
               <th className="px-4 py-3 text-left"><SH label="Cost/g" field="costPerGram" /></th>
-              <th className="px-4 py-3 text-left"><SH label="Days" field="daysToHarvest" /></th>
+              <th className="px-4 py-3 text-left"><SH label="Cycle" field="daysToHarvest" /></th>
               <th className="px-4 py-3 text-left"><span className="text-xs font-medium uppercase tracking-wider text-text-dim">Grade</span></th>
             </tr>
           </thead>

@@ -45,6 +45,11 @@ export default function EnergyAnalytics() {
 
   const totalBreakdown = breakdownData.reduce((s, d) => s + d.value, 0);
 
+  function fmt(v: number, decimalsLarge = 1): string {
+    if (v === 0) return "0";
+    return v < 1 ? v.toFixed(3) : v.toFixed(decimalsLarge);
+  }
+
   return (
     <div className="space-y-4">
       {/* KPI row */}
@@ -55,28 +60,28 @@ export default function EnergyAnalytics() {
             <p className="text-xs text-text-dim">This Month</p>
           </div>
           <p className="mt-1 font-mono text-xl font-semibold text-text">
-            {data.monthCostKr.toFixed(0)}{" "}
+            {fmt(data.monthCostKr)}{" "}
             <span className="text-sm text-text-dim">kr</span>
           </p>
         </div>
         <div className="rounded-xl border border-border bg-bg-card p-4">
           <p className="text-xs text-text-dim">Total (30d)</p>
           <p className="mt-1 font-mono text-xl font-semibold text-text">
-            {data.totalKwh.toFixed(1)}{" "}
+            {fmt(data.totalKwh)}{" "}
             <span className="text-sm text-text-dim">kWh</span>
           </p>
         </div>
         <div className="rounded-xl border border-border bg-bg-card p-4">
           <p className="text-xs text-text-dim">Energy Cost / kg</p>
           <p className="mt-1 font-mono text-xl font-semibold text-text">
-            {data.energyCostPerKg > 0 ? data.energyCostPerKg.toFixed(1) : "--"}{" "}
+            {data.energyCostPerKg > 0 ? fmt(data.energyCostPerKg) : "--"}{" "}
             <span className="text-sm text-text-dim">kr/kg</span>
           </p>
         </div>
         <div className="rounded-xl border border-border bg-bg-card p-4">
           <p className="text-xs text-text-dim">Total Cost (30d)</p>
           <p className="mt-1 font-mono text-xl font-semibold text-text">
-            {data.totalCostKr.toFixed(0)}{" "}
+            {fmt(data.totalCostKr)}{" "}
             <span className="text-sm text-text-dim">kr</span>
           </p>
         </div>
