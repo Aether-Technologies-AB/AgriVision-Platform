@@ -114,16 +114,48 @@ export async function GET(
       });
     }
 
-    for (const p of photos as any[]) {
+    // Deduplicate photos: Pi uploads raw + processed within seconds.
+    // Keep the one with analysis data; if neither has analysis, keep the first.
+    const dedupedPhotos: typeof photos = [];
+    const sortedPhotos = [...(photos as any[])].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    for (const p of sortedPhotos) {
+      const prev = dedupedPhotos[dedupedPhotos.length - 1];
+      if (
+        prev &&
+        Math.abs(
+          new Date(p.timestamp).getTime() - new Date(prev.timestamp).getTime()
+        ) < 60_000
+      ) {
+        // Within 60s — keep the one with analysis
+        const pHasAnalysis = !!(p.analysis as Record<string, unknown> | null);
+        const prevHasAnalysis = !!(prev.analysis as Record<string, unknown> | null);
+        if (pHasAnalysis && !prevHasAnalysis) {
+          dedupedPhotos[dedupedPhotos.length - 1] = p;
+        }
+        // Otherwise keep prev (already there)
+        continue;
+      }
+      dedupedPhotos.push(p);
+    }
+
+    for (const p of dedupedPhotos as any[]) {
       const analysis = p.analysis as Record<string, unknown> | null;
+      let detail: string | null = null;
+      if (analysis) {
+        const count = analysis.mushroom_count;
+        detail =
+          count != null && Number(count) > 0
+            ? `Mushrooms: ${count}`
+            : "No clusters detected";
+      }
       timeline.push({
         id: p.id,
         type: "photo",
         subtype: "CAPTURE",
         title: "Photo captured",
-        detail: analysis
-          ? `Mushrooms: ${analysis.mushroom_count ?? "?"}, Weight: ${analysis.estimated_weight_g ?? "?"}g`
-          : null,
+        detail,
         timestamp: p.timestamp.toISOString(),
         meta: { rgbUrl: p.rgbUrl, analysis },
       });

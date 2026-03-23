@@ -44,15 +44,15 @@ const typeIcons: Record<string, React.ReactNode> = {
 function formatTimestamp(ts: string): string {
   const d = new Date(ts);
   const now = new Date();
-  const diff = now.getTime() - d.getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const eventDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const daysDiff = Math.round((today.getTime() - eventDay.getTime()) / (1000 * 60 * 60 * 24));
+  const time = d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
 
-  if (days === 0) {
-    return d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" }) + " today";
-  }
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days} days ago`;
-  return d.toLocaleDateString("sv-SE", { month: "short", day: "numeric" });
+  if (daysDiff === 0) return time + " today";
+  if (daysDiff === 1) return time + " yesterday";
+  if (daysDiff < 7) return time + ` · ${daysDiff}d ago`;
+  return d.toLocaleDateString("sv-SE", { month: "short", day: "numeric" }) + " " + time;
 }
 
 function TimelineItem({ event }: { event: TimelineEvent }) {
