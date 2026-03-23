@@ -145,9 +145,10 @@ export async function GET(
       let detail: string | null = null;
       if (analysis) {
         const count = analysis.mushroom_count;
+        const weight = analysis.estimated_weight_g;
         detail =
           count != null && Number(count) > 0
-            ? `Mushrooms: ${count}`
+            ? `Mushrooms: ${count}, Weight: ${weight ?? "?"}g`
             : "No clusters detected";
       }
       timeline.push({
