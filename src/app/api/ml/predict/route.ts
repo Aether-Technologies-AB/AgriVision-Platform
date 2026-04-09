@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-key";
-import { writeFileSync, existsSync, mkdirSync } from "fs";
 
 // ─── ONNX session cache (persists across warm invocations) ───
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sessionCache = new Map<string, any>();
-const MODEL_CACHE_DIR = "/tmp/agrivision-models";
 
 // ─── ImageNet normalization constants ───
 
@@ -17,39 +15,31 @@ const INPUT_SIZE = 224;
 
 // ─── Helpers ───
 
-async function getOrLoadSession(
-  modelName: string,
-  fileUrl: string
-) {
+async function getOrLoadSession(modelName: string, fileUrl: string) {
   const cacheKey = `${modelName}_${fileUrl}`;
 
   if (sessionCache.has(cacheKey)) {
     return sessionCache.get(cacheKey)!;
   }
 
-  // Ensure cache directory exists
-  if (!existsSync(MODEL_CACHE_DIR)) {
-    mkdirSync(MODEL_CACHE_DIR, { recursive: true });
+  // Download model as ArrayBuffer (onnxruntime-web doesn't use filesystem)
+  const response = await fetch(fileUrl);
+  if (!response.ok) {
+    throw new Error(
+      `Failed to download model from ${fileUrl}: ${response.status}`
+    );
   }
+  const modelBuffer = await response.arrayBuffer();
 
-  // Download model to /tmp if not already there
-  const localPath = `${MODEL_CACHE_DIR}/${modelName}.onnx`;
-  if (!existsSync(localPath)) {
-    const response = await fetch(fileUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to download model from ${fileUrl}: ${response.status}`);
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-    writeFileSync(localPath, buffer);
-  }
-
-  const ort = await import("onnxruntime-node");
-  const session = await ort.InferenceSession.create(localPath);
+  const ort = await import("onnxruntime-web");
+  const session = await ort.InferenceSession.create(Buffer.from(modelBuffer));
   sessionCache.set(cacheKey, session);
   return session;
 }
 
-async function preprocessImage(base64Image: string): Promise<Float32Array> {
+async function preprocessImage(
+  base64Image: string
+): Promise<Float32Array> {
   const sharpModule = (await import("sharp")).default;
 
   // Decode base64 → resize 256 → center crop 224 → raw RGB
@@ -72,12 +62,9 @@ async function preprocessImage(base64Image: string): Promise<Float32Array> {
   const float32 = new Float32Array(3 * pixels);
 
   for (let i = 0; i < pixels; i++) {
-    // R channel
     float32[i] = (data[i * 3] / 255 - IMAGENET_MEAN[0]) / IMAGENET_STD[0];
-    // G channel
     float32[pixels + i] =
       (data[i * 3 + 1] / 255 - IMAGENET_MEAN[1]) / IMAGENET_STD[1];
-    // B channel
     float32[2 * pixels + i] =
       (data[i * 3 + 2] / 255 - IMAGENET_MEAN[2]) / IMAGENET_STD[2];
   }
@@ -144,8 +131,13 @@ export async function POST(request: NextRequest) {
 
     // Preprocess image: base64 → 224x224 NCHW float32 normalized
     const inputData = await preprocessImage(image);
-    const ort = await import("onnxruntime-node");
-    const inputTensor = new ort.Tensor("float32", inputData, [1, 3, INPUT_SIZE, INPUT_SIZE]);
+    const ort = await import("onnxruntime-web");
+    const inputTensor = new ort.Tensor("float32", inputData, [
+      1,
+      3,
+      INPUT_SIZE,
+      INPUT_SIZE,
+    ]);
 
     // Run inference
     const results = await session.run({ input: inputTensor });
@@ -169,7 +161,8 @@ export async function POST(request: NextRequest) {
             healthy: healthyProb,
           },
           alert: contaminatedProb > 0.7,
-          needsClaudeCheck: contaminatedProb > 0.3 && contaminatedProb < 0.7,
+          needsClaudeCheck:
+            contaminatedProb > 0.3 && contaminatedProb < 0.7,
         },
         fallback: false,
         models_used: {
@@ -185,7 +178,12 @@ export async function POST(request: NextRequest) {
       {
         error: "ML inference failed",
         detail: err instanceof Error ? err.message : String(err),
-        stack: process.env.NODE_ENV === "development" ? (err instanceof Error ? err.stack : undefined) : undefined,
+        stack:
+          process.env.NODE_ENV === "development"
+            ? err instanceof Error
+              ? err.stack
+              : undefined
+            : undefined,
         fallback: true,
       },
       { status: 500 }
