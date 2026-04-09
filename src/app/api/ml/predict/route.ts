@@ -180,9 +180,14 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (err) {
-    console.error("ML predict error:", err);
+    console.error("[ML] Prediction error:", err);
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: "ML inference failed",
+        detail: err instanceof Error ? err.message : String(err),
+        stack: process.env.NODE_ENV === "development" ? (err instanceof Error ? err.stack : undefined) : undefined,
+        fallback: true,
+      },
       { status: 500 }
     );
   }
