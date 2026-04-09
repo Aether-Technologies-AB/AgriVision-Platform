@@ -5,12 +5,6 @@ import { writeFileSync, existsSync, mkdirSync } from "fs";
 
 // ─── ONNX session cache (persists across warm invocations) ───
 
-type OnnxSession = Awaited<
-  ReturnType<typeof import("onnxruntime-node")>
->["InferenceSession"] extends { create: (...args: unknown[]) => Promise<infer S> }
-  ? S
-  : never;
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sessionCache = new Map<string, any>();
 const MODEL_CACHE_DIR = "/tmp/agrivision-models";
