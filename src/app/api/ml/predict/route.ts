@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-key";
-import { InferenceSession, Tensor } from "onnxruntime-node";
-import sharp from "sharp";
 import { writeFileSync, existsSync, mkdirSync } from "fs";
 
 // ─── ONNX session cache (persists across warm invocations) ───
 
-const sessionCache = new Map<string, InferenceSession>();
+type OnnxSession = Awaited<
+  ReturnType<typeof import("onnxruntime-node")>
+>["InferenceSession"] extends { create: (...args: unknown[]) => Promise<infer S> }
+  ? S
+  : never;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const sessionCache = new Map<string, any>();
 const MODEL_CACHE_DIR = "/tmp/agrivision-models";
 
 // ─── ImageNet normalization constants ───
@@ -21,7 +26,7 @@ const INPUT_SIZE = 224;
 async function getOrLoadSession(
   modelName: string,
   fileUrl: string
-): Promise<InferenceSession> {
+) {
   const cacheKey = `${modelName}_${fileUrl}`;
 
   if (sessionCache.has(cacheKey)) {
@@ -44,16 +49,19 @@ async function getOrLoadSession(
     writeFileSync(localPath, buffer);
   }
 
-  const session = await InferenceSession.create(localPath);
+  const ort = await import("onnxruntime-node");
+  const session = await ort.InferenceSession.create(localPath);
   sessionCache.set(cacheKey, session);
   return session;
 }
 
 async function preprocessImage(base64Image: string): Promise<Float32Array> {
+  const sharpModule = (await import("sharp")).default;
+
   // Decode base64 → resize 256 → center crop 224 → raw RGB
   const imageBuffer = Buffer.from(base64Image, "base64");
 
-  const { data, info } = await sharp(imageBuffer)
+  const { data } = await sharpModule(imageBuffer)
     .resize(256, 256, { fit: "cover" })
     .extract({
       left: Math.floor((256 - INPUT_SIZE) / 2),
@@ -142,7 +150,8 @@ export async function POST(request: NextRequest) {
 
     // Preprocess image: base64 → 224x224 NCHW float32 normalized
     const inputData = await preprocessImage(image);
-    const inputTensor = new Tensor("float32", inputData, [1, 3, INPUT_SIZE, INPUT_SIZE]);
+    const ort = await import("onnxruntime-node");
+    const inputTensor = new ort.Tensor("float32", inputData, [1, 3, INPUT_SIZE, INPUT_SIZE]);
 
     // Run inference
     const results = await session.run({ input: inputTensor });
