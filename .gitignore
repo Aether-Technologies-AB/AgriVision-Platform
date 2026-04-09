@@ -41,3 +41,7 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# ML model binaries (stored in Vercel Blob, not git)
+*.onnx
+*.textClipping
