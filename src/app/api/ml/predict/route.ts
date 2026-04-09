@@ -33,10 +33,17 @@ async function getOrLoadSession(modelName: string, fileUrl: string) {
 
   const ort = await import("onnxruntime-web");
 
-  // Point WASM backend to CDN — bundled .mjs/.wasm files aren't available in Vercel serverless
-  ort.env.wasm.wasmPaths =
-    "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/";
+  // Node.js ESM loader can't fetch WASM from https:// URLs.
+  // Download the WASM binary ourselves and provide it directly.
+  const wasmUrl =
+    "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort-wasm-simd.wasm";
+  const wasmResponse = await fetch(wasmUrl);
+  if (!wasmResponse.ok) {
+    throw new Error(`Failed to download WASM runtime: ${wasmResponse.status}`);
+  }
+  ort.env.wasm.wasmBinary = await wasmResponse.arrayBuffer();
   ort.env.wasm.numThreads = 1;
+  ort.env.wasm.proxy = false;
 
   const session = await ort.InferenceSession.create(
     new Uint8Array(modelBuffer)
