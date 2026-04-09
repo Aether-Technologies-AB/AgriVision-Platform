@@ -32,7 +32,15 @@ async function getOrLoadSession(modelName: string, fileUrl: string) {
   const modelBuffer = await response.arrayBuffer();
 
   const ort = await import("onnxruntime-web");
-  const session = await ort.InferenceSession.create(Buffer.from(modelBuffer));
+
+  // Point WASM backend to CDN — bundled .mjs/.wasm files aren't available in Vercel serverless
+  ort.env.wasm.wasmPaths =
+    "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/";
+  ort.env.wasm.numThreads = 1;
+
+  const session = await ort.InferenceSession.create(
+    new Uint8Array(modelBuffer)
+  );
   sessionCache.set(cacheKey, session);
   return session;
 }
