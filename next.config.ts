@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
-  serverExternalPackages: ['sharp'],
+  serverExternalPackages: ['sharp', 'onnxruntime-web'],
   images: {
     remotePatterns: [
       { hostname: "placehold.co" },

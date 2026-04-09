@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-key";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 // ─── ONNX session cache (persists across warm invocations) ───
 
@@ -33,15 +35,13 @@ async function getOrLoadSession(modelName: string, fileUrl: string) {
 
   const ort = await import("onnxruntime-web");
 
-  // Node.js ESM loader can't fetch WASM from https:// URLs.
-  // Download the WASM binary ourselves and provide it directly.
-  const wasmUrl =
-    "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort-wasm-simd.wasm";
-  const wasmResponse = await fetch(wasmUrl);
-  if (!wasmResponse.ok) {
-    throw new Error(`Failed to download WASM runtime: ${wasmResponse.status}`);
-  }
-  ort.env.wasm.wasmBinary = await wasmResponse.arrayBuffer();
+  // Load WASM binary from the bundled node_modules file
+  // Node.js ESM loader can't fetch from https:// and Vercel doesn't bundle .wasm
+  const wasmPath = join(
+    process.cwd(),
+    "node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm"
+  );
+  ort.env.wasm.wasmBinary = readFileSync(wasmPath).buffer;
   ort.env.wasm.numThreads = 1;
   ort.env.wasm.proxy = false;
 
