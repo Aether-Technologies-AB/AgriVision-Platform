@@ -9,13 +9,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { farmId, zoneId, deviceName, kWh } = await request.json();
+    const body = await request.json();
+    const { farmId, zoneId } = body;
 
-    if (!farmId || !deviceName || kWh == null) {
-      return NextResponse.json(
-        { error: "farmId, deviceName, and kWh are required" },
-        { status: 400 }
-      );
+    if (!farmId) {
+      return NextResponse.json({ error: "farmId is required" }, { status: 400 });
     }
 
     // Verify farm belongs to the API key's org
@@ -28,19 +26,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Farm not found" }, { status: 404 });
     }
 
-    const costKr = kWh * farm.electricityPriceKrPerKwh;
+    // Support both single and batched readings
+    const readings: { deviceName: string; kWh: number }[] = body.readings
+      ? body.readings
+      : [{ deviceName: body.deviceName, kWh: body.kWh }];
 
-    const reading = await prisma.energyReading.create({
-      data: {
+    if (readings.some((r: { deviceName: string; kWh: number }) => !r.deviceName || r.kWh == null)) {
+      return NextResponse.json(
+        { error: "Each reading requires deviceName and kWh" },
+        { status: 400 }
+      );
+    }
+
+    const created = await prisma.energyReading.createMany({
+      data: readings.map((r: { deviceName: string; kWh: number }) => ({
         farmId,
         zoneId: zoneId || null,
-        deviceName,
-        kWh,
-        costKr,
-      },
+        deviceName: r.deviceName,
+        kWh: r.kWh,
+        costKr: r.kWh * farm.electricityPriceKrPerKwh,
+      })),
     });
 
-    return NextResponse.json({ id: reading.id, costKr }, { status: 201 });
+    return NextResponse.json({ count: created.count }, { status: 201 });
   } catch (err) {
     console.error("Energy reading error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

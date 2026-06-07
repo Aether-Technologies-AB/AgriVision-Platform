@@ -423,3 +423,64 @@ BLOB_READ_WRITE_TOKEN — Vercel Blob for photos + model files
 
 - Business from €500/mo (unlimited zones, full scheduling, profit analytics, ML vision, API, dedicated support)
 - OEM custom (white-label for equipment manufacturers)
+
+## ML Models — Current Status
+
+### Model A: Contamination Classifier (DEPLOYED)
+- **File:** `contamination_v1.onnx` (15.3 MB, FP32)
+- **Architecture:** EfficientNet-B0, fine-tuned from ImageNet
+- **Task:** Binary classification — healthy vs contaminated
+- **Training:** 260 images (176 healthy + 84 contaminated), 30 epochs, 97.4% val accuracy
+- **Input:** 224×224 RGB, NCHW, ImageNet normalization (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+- **Output:** 2 logits → softmax → [contaminated, healthy] probabilities
+- **Class order:** alphabetical — index 0 = contaminated, index 1 = healthy
+- **Confidence threshold:** 0.7 (below this → fall back to Claude vision)
+- **Location:** Vercel Blob at `models/oyster/contamination_v1.onnx`
+- **Registered in:** MLModel table (name="contamination", version="1.0.0", cropType="oyster")
+- **Note:** Lion's mane orange/yellow = HEALTHY, not contamination
+
+### Model B: Coverage Estimator (NOT YET — collecting training data)
+- Will be a 4-class stage classifier: early (<25%) / mid (25-60%) / late (60-90%) / fully_colonized (90%+)
+- Training data comes from Claude vision labels — each $0.25 coverage check generates a free training label
+- Expected: ~100-170 labeled images after 3-4 colonization cycles (~2 months)
+- Until then: Claude vision handles coverage estimation at $0.25/call
+
+## POST /api/ml/predict — Implementation Notes
+
+- **Route:** `src/app/api/ml/predict/route.ts`
+- **Auth:** `validateApiKey(request)` — same as agent routes
+- **Request:** `{ cropType: "oyster", image: "<base64 JPEG>" }` — no batchId needed
+- **Model lookup:** `cropType.split("_")[0]` maps to model family (e.g. "oyster_blue" → "oyster")
+- **ONNX caching:** Downloaded from Blob URL to `/tmp/agrivision-models/`, kept in-memory via Map
+- **Image preprocessing:** Uses `sharp` — resize 256, center crop 224, raw RGB → Float32Array NCHW with ImageNet normalization
+- **Dependencies:** `onnxruntime-node`, `sharp` (both in `serverComponentsExternalPackages`)
+- **Response format:**
+```json
+{
+  "contamination": {
+    "prediction": "healthy",
+    "confidence": 0.9234,
+    "probabilities": { "contaminated": 0.0766, "healthy": 0.9234 },
+    "alert": false,
+    "needsClaudeCheck": false
+  },
+  "fallback": false,
+  "models_used": { "contamination": "1.0.0" },
+  "inference_ms": 847
+}
+```
+- **If no model found:** returns `{ fallback: true }` — Pi uses Claude vision instead
+- **Future:** When Model B (coverage) is ready, this endpoint runs both models on one image and returns both results
+
+## Colonization Agent v2 (Pi 5)
+
+- **File:** `colonization_agent_v2.py` (runs on Pi 5 with HQ Camera 12MP)
+- **Vision cycle (every 12h):**
+  1. Capture 12MP rack photo
+  2. Crop 3 representative bags (top/mid/bottom shelf)
+  3. Send all 3 to `POST /api/ml/predict` for contamination (free)
+  4. Send 1 bag to Claude vision for coverage estimation ($0.25)
+  5. If ML confidence < 0.7 on any bag → Claude fallback for that bag
+- **Cost:** ~$0.50/day (2 checks × $0.25 Claude) — drops to $0.00 when Model B is ready
+- **Sensor:** ESP32 every 10 min, alerts if temp outside 18-24°C
+- **No actuators** — colonization is passive monitoring only

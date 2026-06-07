@@ -30,8 +30,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create sensor reading and update zone status in parallel
-    const [reading] = await Promise.all([
+    const stale =
+      !zone.agentLastSeen ||
+      Date.now() - new Date(zone.agentLastSeen).getTime() > 3600_000;
+
+    const writes: Promise<unknown>[] = [
       prisma.sensorReading.create({
         data: {
           zoneId,
@@ -42,14 +45,21 @@ export async function POST(request: NextRequest) {
           battery: battery ?? null,
         },
       }),
-      prisma.zone.update({
-        where: { id: zoneId },
-        data: {
-          agentStatus: "ONLINE",
-          agentLastSeen: new Date(),
-        },
-      }),
-    ]);
+    ];
+
+    if (stale || zone.agentStatus !== "ONLINE") {
+      writes.push(
+        prisma.zone.update({
+          where: { id: zoneId },
+          data: {
+            agentStatus: "ONLINE",
+            agentLastSeen: new Date(),
+          },
+        })
+      );
+    }
+
+    const [reading] = (await Promise.all(writes)) as [{ id: string }];
 
     return NextResponse.json({ id: reading.id }, { status: 201 });
   } catch (err) {

@@ -14,6 +14,7 @@ const sessionCache = new Map<string, any>();
 const IMAGENET_MEAN = [0.485, 0.456, 0.406];
 const IMAGENET_STD = [0.229, 0.224, 0.225];
 const INPUT_SIZE = 224;
+const CONTAM_THRESHOLD = 0.3;
 
 // ─── Helpers ───
 
@@ -113,17 +114,18 @@ export async function POST(request: NextRequest) {
     // Map crop variant to model family: "oyster_blue" → "oyster"
     const modelFamily = cropType.split("_")[0];
 
-    // Look up active contamination model for this crop family
-    const contaminationModel = await prisma.mLModel.findFirst({
+    // Look up active contamination models for this crop family (ensemble = multiple folds)
+    const contaminationModels = await prisma.mLModel.findMany({
       where: {
-        name: "contamination",
+        name: { startsWith: "contamination" },
         cropType: modelFamily,
         isActive: true,
       },
+      orderBy: { name: "asc" },
     });
 
-    // No model available → fallback response (Pi uses Claude vision instead)
-    if (!contaminationModel) {
+    // No models available → fallback response (Pi uses Claude vision instead)
+    if (contaminationModels.length === 0) {
       return NextResponse.json(
         {
           fallback: true,
@@ -138,13 +140,7 @@ export async function POST(request: NextRequest) {
 
     const startTime = Date.now();
 
-    // Load ONNX session (cached after first call)
-    const session = await getOrLoadSession(
-      `${contaminationModel.name}_${contaminationModel.cropType}_${contaminationModel.version}`,
-      contaminationModel.fileUrl
-    );
-
-    // Preprocess image: base64 → 224x224 NCHW float32 normalized
+    // Preprocess image once: base64 → 224x224 NCHW float32 normalized
     const inputData = await preprocessImage(image);
     const ort = await import("onnxruntime-web");
     const inputTensor = new ort.Tensor("float32", inputData, [
@@ -154,34 +150,75 @@ export async function POST(request: NextRequest) {
       INPUT_SIZE,
     ]);
 
-    // Run inference
-    const results = await session.run({ input: inputTensor });
-    const outputData = results.output.data as Float32Array;
+    // Run all fold models and collect softmax probabilities
+    const allProbs: number[][] = [];
+
+    for (const model of contaminationModels) {
+      const session = await getOrLoadSession(
+        `${model.name}_${model.cropType}_${model.version}`,
+        model.fileUrl
+      );
+
+      const results = await session.run({ image: inputTensor });
+      // Output key may be "output" (single model) or first output name
+      const outputKey = Object.keys(results)[0];
+      const outputData = results[outputKey].data as Float32Array;
+
+      allProbs.push(softmax(outputData));
+    }
+
+    // Average softmax outputs across all folds
+    const numClasses = allProbs[0].length;
+    const avgProbs = new Array(numClasses).fill(0);
+    for (const probs of allProbs) {
+      for (let i = 0; i < numClasses; i++) {
+        avgProbs[i] += probs[i];
+      }
+    }
+    for (let i = 0; i < numClasses; i++) {
+      avgProbs[i] /= allProbs.length;
+    }
 
     // Class order: index 0 = contaminated, index 1 = healthy
-    const probabilities = softmax(outputData);
-    const contaminatedProb = probabilities[0];
-    const healthyProb = probabilities[1];
-    const isContaminated = contaminatedProb > healthyProb;
+    const contaminatedProb = avgProbs[0];
+    const healthyProb = avgProbs[1];
+    const isContaminated = contaminatedProb >= CONTAM_THRESHOLD;
+    const confidence = isContaminated ? contaminatedProb : healthyProb;
+
+    // Agreement: fraction of individual models that agree with ensemble decision
+    const individualPreds = allProbs.map((p) => p[0] >= CONTAM_THRESHOLD);
+    const agreement =
+      individualPreds.filter((p) => p === isContaminated).length /
+      allProbs.length;
 
     const inferenceMs = Date.now() - startTime;
+
+    const modelVersions = contaminationModels.map(
+      (m) => `${m.name}@v${m.version}`
+    );
 
     return NextResponse.json(
       {
         contamination: {
           prediction: isContaminated ? "contaminated" : "healthy",
-          confidence: Math.max(contaminatedProb, healthyProb),
+          confidence: Math.round(confidence * 1000) / 1000,
           probabilities: {
-            contaminated: contaminatedProb,
-            healthy: healthyProb,
+            contaminated: Math.round(contaminatedProb * 1000) / 1000,
+            healthy: Math.round(healthyProb * 1000) / 1000,
           },
+          agreement,
+          threshold: CONTAM_THRESHOLD,
           alert: contaminatedProb > 0.7,
           needsClaudeCheck:
-            contaminatedProb > 0.3 && contaminatedProb < 0.7,
+            contaminatedProb >= 0.3 && contaminatedProb < 0.7,
         },
         fallback: false,
+        ensemble: {
+          fold_count: allProbs.length,
+          models: modelVersions,
+        },
         models_used: {
-          contamination: `v${contaminationModel.version}`,
+          contamination: `v${contaminationModels[0].version} (${allProbs.length}-fold ensemble)`,
         },
         inference_ms: inferenceMs,
       },

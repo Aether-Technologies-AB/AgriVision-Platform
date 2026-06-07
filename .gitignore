@@ -45,3 +45,7 @@ next-env.d.ts
 # ML model binaries (stored in Vercel Blob, not git)
 *.onnx
 *.textClipping
+
+# secrets — plaintext API keys / migration outputs
+scripts/20260430_migration_output.txt
+scripts/env_template_mushu_pis.txt

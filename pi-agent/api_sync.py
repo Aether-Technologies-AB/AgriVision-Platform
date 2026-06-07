@@ -274,7 +274,7 @@ class AgriVisionSync:
         device_name: str,
         kwh: float,
     ) -> Optional[str]:
-        """Push an energy reading from a Tapo P110 plug. Returns reading ID or None."""
+        """Push a single energy reading. Returns reading ID or None."""
         payload: dict[str, Any] = {
             "farmId": farm_id,
             "deviceName": device_name,
@@ -287,6 +287,28 @@ class AgriVisionSync:
         if result:
             logger.info("Energy pushed: %s %.3f kWh", device_name, kwh)
             return result.get("id")
+        return None
+
+    def push_energy_batch(
+        self,
+        farm_id: str,
+        zone_id: Optional[str],
+        readings: list[dict],
+    ) -> Optional[list[str]]:
+        """Push multiple energy readings in one request. Returns list of IDs or None.
+        Each reading: {"deviceName": str, "kWh": float}"""
+        payload: dict[str, Any] = {
+            "farmId": farm_id,
+            "readings": readings,
+        }
+        if zone_id:
+            payload["zoneId"] = zone_id
+
+        result = self._request("POST", "/api/agent/energy", json=payload)
+        if result:
+            ids = result.get("ids", [])
+            logger.info("Energy batch pushed: %d readings", len(readings))
+            return ids
         return None
 
     # ── Model Updates ────────────────────────────────────────────

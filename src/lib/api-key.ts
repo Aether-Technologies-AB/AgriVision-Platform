@@ -24,11 +24,12 @@ export async function validateApiKey(request: NextRequest) {
     return { error: NextResponse.json({ error: "Invalid API key" }, { status: 401 }), apiKey: null };
   }
 
-  // Update last used timestamp
-  await prisma.apiKey.update({
-    where: { id: apiKey.id },
-    data: { lastUsedAt: new Date() },
-  });
+  if (!apiKey.lastUsedAt || Date.now() - new Date(apiKey.lastUsedAt).getTime() > 3600_000) {
+    await prisma.apiKey.update({
+      where: { id: apiKey.id },
+      data: { lastUsedAt: new Date() },
+    });
+  }
 
   return { error: null, apiKey };
 }
