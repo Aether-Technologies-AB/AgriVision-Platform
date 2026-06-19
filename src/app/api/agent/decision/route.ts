@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { BatchPhase } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-key";
 
@@ -10,6 +11,17 @@ const VALID_DECISION_TYPES = [
   "ALERT",
   "STRATEGIC",
 ] as const;
+
+// Pi microgreens agent sends phase as integer 1-4. Mapping is only applied
+// when the batch's cropType is in MICROGREENS_CROP_TYPES — a stray integer
+// from a mushroom agent must not get mapped to a microgreens phase.
+const MICROGREENS_PHASE_MAP: Record<number, BatchPhase> = {
+  1: BatchPhase.GERMINATION,
+  2: BatchPhase.POST_GERMINATION,
+  3: BatchPhase.ACTIVE_GROWING,
+  4: BatchPhase.PRE_HARVEST,
+};
+const MICROGREENS_CROP_TYPES = new Set(["microgreens"]);
 
 export async function POST(request: NextRequest) {
   const { error, apiKey } = await validateApiKey(request);
@@ -25,6 +37,7 @@ export async function POST(request: NextRequest) {
       sensorContext,
       mlContext,
       costKr,
+      phase,
     } = await request.json();
 
     if (!decisionType || !decision || !reasoning) {
@@ -41,7 +54,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If batchId provided, verify it belongs to the key's organization
+    // If batchId provided, verify it belongs to the key's organization.
+    // When phase is also present and the batch is microgreens, advance Batch.phase.
+    let resolvedBatch: { id: string; cropType: string } | null = null;
     if (batchId) {
       const batch = await prisma.batch.findUnique({
         where: { id: batchId },
@@ -54,6 +69,19 @@ export async function POST(request: NextRequest) {
           { status: 403 }
         );
       }
+      resolvedBatch = { id: batch.id, cropType: batch.cropType };
+    }
+
+    if (phase !== undefined && resolvedBatch) {
+      const mapped = MICROGREENS_PHASE_MAP[phase as number];
+      if (mapped && MICROGREENS_CROP_TYPES.has(resolvedBatch.cropType)) {
+        await prisma.batch.update({
+          where: { id: resolvedBatch.id },
+          data: { phase: mapped },
+        });
+      }
+      // Silent no-op for non-microgreens batches or out-of-range integers —
+      // mushroom agents that send a stray `phase` field must not be rejected.
     }
 
     const aiDecision = await prisma.aIDecision.create({

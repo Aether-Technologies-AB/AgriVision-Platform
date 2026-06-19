@@ -40,7 +40,20 @@ function getMaturityColor(batch: ZoneBatch): string {
   if (batch.phase === "PLANNED") return "bg-amber/40";
   if (batch.phase === "READY_TO_HARVEST") return "bg-green animate-pulse";
 
-  // Gradient from amber (early) to green (near harvest) based on progress
+  // Microgreens lifecycle: map the four discrete phases onto the gradient.
+  switch (batch.phase) {
+    case "GERMINATION":
+      return "bg-amber/60";
+    case "POST_GERMINATION":
+      return "bg-amber/40 ring-1 ring-green/30";
+    case "ACTIVE_GROWING":
+      return "bg-green/50";
+    case "PRE_HARVEST":
+      return "bg-green/70";
+  }
+
+  // Mushroom / fallback: gradient from amber (early) to green (near harvest)
+  // based on day-vs-cycle progress.
   const progress =
     batch.day !== null && batch.estCycleDays && batch.estCycleDays > 0
       ? Math.min(1, batch.day / batch.estCycleDays)

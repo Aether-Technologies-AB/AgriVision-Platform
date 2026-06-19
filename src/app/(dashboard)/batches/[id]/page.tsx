@@ -25,6 +25,10 @@ const phaseColors: Record<string, string> = {
   READY_TO_HARVEST: "bg-amber/15 text-amber",
   HARVESTED: "bg-green-dim/20 text-green-dim",
   CANCELLED: "bg-red/15 text-red",
+  GERMINATION: "bg-amber/15 text-amber",
+  POST_GERMINATION: "bg-blue/15 text-blue",
+  ACTIVE_GROWING: "bg-green/15 text-green",
+  PRE_HARVEST: "bg-green-bright/20 text-green-bright",
 };
 
 const cropLabels: Record<string, string> = {
@@ -33,7 +37,10 @@ const cropLabels: Record<string, string> = {
   oyster_yellow: "Yellow Oyster",
   lions_mane: "Lion's Mane",
   shiitake: "Shiitake",
+  microgreens: "Microgreens",
 };
+
+const MICROGREENS_CROP_TYPES = new Set(["microgreens"]);
 
 interface BatchDetail {
   id: string;
@@ -211,63 +218,79 @@ export default function BatchDetailPage() {
 
         {/* Phase actions */}
         <div className="flex gap-2">
-          {batch.phase === "PLANNED" && (
-            <button
-              onClick={() =>
-                updatePhase("COLONIZATION", {
-                  plantedAt: new Date().toISOString(),
-                })
+          {(() => {
+            const isMicrogreens = MICROGREENS_CROP_TYPES.has(batch.cropType);
+            const phaseAction = (
+              label: string,
+              next: string,
+              extra?: Record<string, string>,
+              actionTaken?: string
+            ) => (
+              <button
+                onClick={() => updatePhase(next, extra, actionTaken)}
+                disabled={actionLoading}
+                className="rounded-lg bg-blue px-4 py-2 text-sm font-semibold text-white hover:bg-blue/80 disabled:opacity-50"
+              >
+                {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : label}
+              </button>
+            );
+
+            if (isMicrogreens) {
+              switch (batch.phase) {
+                case "PLANNED":
+                  return phaseAction("Start Germination", "GERMINATION", {
+                    plantedAt: new Date().toISOString(),
+                  });
+                case "GERMINATION":
+                  return phaseAction("Move to Post-Germination", "POST_GERMINATION");
+                case "POST_GERMINATION":
+                  return phaseAction("Move to Active Growing", "ACTIVE_GROWING");
+                case "ACTIVE_GROWING":
+                  return phaseAction("Move to Pre-Harvest", "PRE_HARVEST");
+                case "PRE_HARVEST":
+                  return phaseAction("Mark Ready to Harvest", "READY_TO_HARVEST");
+                case "READY_TO_HARVEST":
+                  return (
+                    <button
+                      onClick={() => setHarvestOpen(true)}
+                      className="rounded-lg bg-green px-4 py-2 text-sm font-semibold text-bg hover:bg-green-bright"
+                    >
+                      Record Harvest
+                    </button>
+                  );
+                default:
+                  return null;
               }
-              disabled={actionLoading}
-              className="rounded-lg bg-blue px-4 py-2 text-sm font-semibold text-white hover:bg-blue/80 disabled:opacity-50"
-            >
-              {actionLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Start Colonization"
-              )}
-            </button>
-          )}
-          {batch.phase === "COLONIZATION" && (
-            <button
-              onClick={() =>
-                updatePhase(
+            }
+
+            // Mushroom progression
+            switch (batch.phase) {
+              case "PLANNED":
+                return phaseAction("Start Colonization", "COLONIZATION", {
+                  plantedAt: new Date().toISOString(),
+                });
+              case "COLONIZATION":
+                return phaseAction(
+                  "Start Fruiting",
                   "FRUITING",
                   { fruitingAt: new Date().toISOString() },
                   "START_FRUITING"
-                )
-              }
-              disabled={actionLoading}
-              className="rounded-lg bg-green px-4 py-2 text-sm font-semibold text-bg hover:bg-green-bright disabled:opacity-50"
-            >
-              {actionLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Start Fruiting"
-              )}
-            </button>
-          )}
-          {batch.phase === "FRUITING" && (
-            <button
-              onClick={() => updatePhase("READY_TO_HARVEST")}
-              disabled={actionLoading}
-              className="rounded-lg bg-amber px-4 py-2 text-sm font-semibold text-bg hover:bg-amber/80 disabled:opacity-50"
-            >
-              {actionLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Mark Ready to Harvest"
-              )}
-            </button>
-          )}
-          {batch.phase === "READY_TO_HARVEST" && (
-            <button
-              onClick={() => setHarvestOpen(true)}
-              className="rounded-lg bg-green px-4 py-2 text-sm font-semibold text-bg hover:bg-green-bright"
-            >
-              Record Harvest
-            </button>
-          )}
+                );
+              case "FRUITING":
+                return phaseAction("Mark Ready to Harvest", "READY_TO_HARVEST");
+              case "READY_TO_HARVEST":
+                return (
+                  <button
+                    onClick={() => setHarvestOpen(true)}
+                    className="rounded-lg bg-green px-4 py-2 text-sm font-semibold text-bg hover:bg-green-bright"
+                  >
+                    Record Harvest
+                  </button>
+                );
+              default:
+                return null;
+            }
+          })()}
         </div>
       </div>
 
