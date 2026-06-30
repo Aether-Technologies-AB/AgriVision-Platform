@@ -88,6 +88,10 @@ export async function GET(
     // Today's energy for this zone
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+    // Sum deltaKwh (per-poll consumption), NOT kWh (raw lifetime / today-so-
+    // far counter the Pi reports). Pre-fix rows with deltaKwh=NULL contribute
+    // nothing — which is correct, since their kWh values were the raw counter
+    // and can't be re-interpreted here.
     const energyToday = await prisma.energyReading.aggregate({
       where: {
         OR: [
@@ -96,7 +100,7 @@ export async function GET(
         ],
         timestamp: { gte: todayStart },
       },
-      _sum: { kWh: true, costKr: true },
+      _sum: { deltaKwh: true, costKr: true },
     });
 
     // Get sensor reading from ~1h ago for trend comparison
@@ -173,7 +177,7 @@ export async function GET(
         : null,
       recentDecisions,
       energy: {
-        todayKwh: Math.round((energyToday._sum.kWh || 0) * 1000) / 1000,
+        todayKwh: Math.round((energyToday._sum.deltaKwh || 0) * 1000) / 1000,
         todayCostKr: Math.round((energyToday._sum.costKr || 0) * 100) / 100,
       },
     });

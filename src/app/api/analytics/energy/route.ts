@@ -25,24 +25,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "No farm" }, { status: 404 });
     }
 
-    // All energy readings for the farm
+    // Sum deltaKwh (per-poll consumption). Pre-fix rows have deltaKwh=NULL
+    // and contribute nothing — see note in /api/agent/energy.
     const readings = await prisma.energyReading.findMany({
       where: {
         farmId: farm.id,
         timestamp: { gte: since },
       },
       orderBy: { timestamp: "asc" },
-      select: { deviceName: true, kWh: true, costKr: true, timestamp: true },
+      select: { deviceName: true, deltaKwh: true, costKr: true, timestamp: true },
     });
 
-    // Daily consumption chart
     const daily: Record<string, number> = {};
     let totalKwh = 0;
     let totalCostKr = 0;
     for (const r of readings) {
       const day = r.timestamp.toISOString().split("T")[0];
-      daily[day] = (daily[day] || 0) + r.kWh;
-      totalKwh += r.kWh;
+      const d = r.deltaKwh || 0;
+      daily[day] = (daily[day] || 0) + d;
+      totalKwh += d;
       totalCostKr += r.costKr || 0;
     }
     const dailyChart = Object.entries(daily)

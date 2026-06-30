@@ -348,13 +348,41 @@ model EnergyReading {
   zone   Zone?  @relation(fields: [zoneId], references: [id])
 
   deviceName String
+  // kWh = the raw counter value the Pi reported on this poll (Shelly
+  // aenergy.total = lifetime cumulative; Tapo today_wh = cumulative-since-
+  // midnight). Kept for audit + recompute. NOT what dashboards should sum.
   kWh        Float
+  // deltaKwh = consumption since the previous poll for this device, computed
+  // at ingest from the running counter and DeviceEnergyState. This is the
+  // field every read path must sum. Nullable so rows that pre-date the
+  // delta-at-ingest fix stay distinguishable from a genuine 0 delta.
+  deltaKwh   Float?
   costKr     Float?
 
   timestamp DateTime @default(now())
 
   @@index([farmId, timestamp])
   @@index([zoneId, timestamp])
+}
+
+// Per-device running counter, used to derive deltaKwh on the next ingest.
+// Keyed by (farmId, deviceName) — device names are assumed unique within a
+// farm (e.g. "light", "Main Humidifier"). If two zones in the same farm need
+// to host devices with the same name, rename one — there is no zone scoping
+// here on purpose, because Tapo/Shelly counters are device-local, not
+// zone-local.
+model DeviceEnergyState {
+  id              String   @id @default(cuid())
+  farmId          String
+  deviceName      String
+  // The last counter value we saw from this device. On the next reading we
+  // compute current - lastCounterKwh; if current < lastCounterKwh we treat it
+  // as a counter reset (Shelly reboot / Tapo midnight rollover) and bill the
+  // new reading as the delta.
+  lastCounterKwh  Float
+  updatedAt       DateTime @updatedAt
+
+  @@unique([farmId, deviceName])
 }
 
 model Command {

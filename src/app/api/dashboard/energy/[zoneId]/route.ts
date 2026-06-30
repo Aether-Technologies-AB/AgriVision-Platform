@@ -33,7 +33,9 @@ export async function GET(
     };
     const since = new Date(now.getTime() - (rangeMs[range] || rangeMs["24h"]));
 
-    // Get all readings for zone + farm-wide
+    // Sum deltaKwh (per-poll consumption). Pre-fix rows have deltaKwh=NULL
+    // and are skipped — those rows held the raw lifetime/today counter and
+    // can't be re-interpreted as consumption without the backfill script.
     const readings = await prisma.energyReading.findMany({
       where: {
         OR: [
@@ -45,23 +47,21 @@ export async function GET(
       orderBy: { timestamp: "asc" },
       select: {
         deviceName: true,
-        kWh: true,
+        deltaKwh: true,
         costKr: true,
         timestamp: true,
       },
     });
 
-    // Group by device for summary
     const byDevice: Record<string, { kWh: number; costKr: number }> = {};
     for (const r of readings) {
       if (!byDevice[r.deviceName]) {
         byDevice[r.deviceName] = { kWh: 0, costKr: 0 };
       }
-      byDevice[r.deviceName].kWh += r.kWh;
+      byDevice[r.deviceName].kWh += r.deltaKwh || 0;
       byDevice[r.deviceName].costKr += r.costKr || 0;
     }
 
-    // Group by hour/day for chart
     const bucketMs = range === "24h" ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
     const timeSeries: Record<string, Record<string, number>> = {};
 
@@ -73,14 +73,14 @@ export async function GET(
         timeSeries[bucketTime] = {};
       }
       timeSeries[bucketTime][r.deviceName] =
-        (timeSeries[bucketTime][r.deviceName] || 0) + r.kWh;
+        (timeSeries[bucketTime][r.deviceName] || 0) + (r.deltaKwh || 0);
     }
 
     const chart = Object.entries(timeSeries)
       .map(([time, devices]) => ({ time, ...devices }))
       .sort((a, b) => a.time.localeCompare(b.time));
 
-    const totalKwh = readings.reduce((s, r) => s + r.kWh, 0);
+    const totalKwh = readings.reduce((s, r) => s + (r.deltaKwh || 0), 0);
     const totalCostKr = readings.reduce((s, r) => s + (r.costKr || 0), 0);
 
     return NextResponse.json({

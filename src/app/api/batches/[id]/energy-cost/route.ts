@@ -27,25 +27,25 @@ export async function GET(
     const startDate = batch.plantedAt || batch.createdAt;
     const endDate = batch.harvestedAt || new Date();
 
+    // Sum deltaKwh (per-poll consumption). Pre-fix rows have deltaKwh=NULL
+    // and contribute nothing — see note in /api/agent/energy.
     const result = await prisma.energyReading.aggregate({
       where: {
         zoneId: batch.zoneId,
         timestamp: { gte: startDate, lte: endDate },
       },
-      _sum: { costKr: true, kWh: true },
+      _sum: { costKr: true, deltaKwh: true },
     });
 
-    // Also get proportional share of farm-wide energy (no zoneId)
     const farmWide = await prisma.energyReading.aggregate({
       where: {
         farmId: batch.zone.farmId,
         zoneId: null,
         timestamp: { gte: startDate, lte: endDate },
       },
-      _sum: { costKr: true, kWh: true },
+      _sum: { costKr: true, deltaKwh: true },
     });
 
-    // Count active zones during this period for proportional share
     const zoneCount = await prisma.zone.count({
       where: { farmId: batch.zone.farmId },
     });
@@ -56,8 +56,8 @@ export async function GET(
 
     return NextResponse.json({
       energyCostKr: Math.round(totalEnergyCost * 100) / 100,
-      zoneKwh: result._sum.kWh || 0,
-      farmShareKwh: zoneCount > 0 ? (farmWide._sum.kWh || 0) / zoneCount : 0,
+      zoneKwh: result._sum.deltaKwh || 0,
+      farmShareKwh: zoneCount > 0 ? (farmWide._sum.deltaKwh || 0) / zoneCount : 0,
     });
   } catch (err) {
     console.error("Energy cost error:", err);
