@@ -21,7 +21,7 @@ const MICROGREENS_PHASE_MAP: Record<number, BatchPhase> = {
   3: BatchPhase.ACTIVE_GROWING,
   4: BatchPhase.PRE_HARVEST,
 };
-const MICROGREENS_CROP_TYPES = new Set(["microgreens"]);
+const MICROGREENS_CROP_TYPES = new Set(["microgreens", "sakura-radish"]);
 
 export async function POST(request: NextRequest) {
   const { error, apiKey } = await validateApiKey(request);

@@ -123,6 +123,67 @@ class AgriVisionSync:
             return result.get("id")
         return None
 
+    # ── Batch Registration ───────────────────────────────────────
+
+    def register_batch(
+        self,
+        batch_number: str,
+        crop_type: str,
+        substrate: Optional[str] = None,
+        bag_count: Optional[int] = None,
+        phase: Optional[Any] = None,
+        planted_at: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> Optional[dict]:
+        """Upsert a Batch on the cloud, keyed by batch_number (unique).
+
+        Call this once on agent startup. Returns the full batch dict (including
+        cloud-side `id` — the Batch.id cuid you pass as `batch_id` to
+        push_decision / push_vision later). Safe to re-run after reboots: the
+        endpoint only updates fields the caller supplies, so operator changes
+        in the dashboard (e.g. bag_count, notes) are preserved.
+
+        `phase` may be either the enum string (e.g. "GERMINATION") or the
+        microgreens integer (1-4) the agent uses internally.
+        """
+        payload: dict[str, Any] = {
+            "zoneId": self.zone_id,
+            "batchNumber": batch_number,
+            "cropType": crop_type,
+        }
+        if substrate is not None:
+            payload["substrate"] = substrate
+        if bag_count is not None:
+            payload["bagCount"] = bag_count
+        if phase is not None:
+            payload["phase"] = phase
+        if planted_at is not None:
+            payload["plantedAt"] = planted_at
+        if notes is not None:
+            payload["notes"] = notes
+
+        result = self._request("POST", "/api/agent/batch", json=payload)
+        if result and result.get("id"):
+            logger.info(
+                "Batch registered: %s (id=%s, phase=%s)",
+                batch_number,
+                result["id"],
+                result.get("phase"),
+            )
+            return result
+        return None
+
+    def get_batch(self, batch_number: str) -> Optional[dict]:
+        """Look up an existing Batch by batch_number. Returns batch dict or None."""
+        result = self._request(
+            "GET",
+            "/api/agent/batch",
+            params={"batchNumber": batch_number},
+        )
+        if result and result.get("id"):
+            return result
+        return None
+
     # ── ML Vision Results ────────────────────────────────────────
 
     def push_vision(self, batch_id: str, analysis: dict) -> Optional[str]:
