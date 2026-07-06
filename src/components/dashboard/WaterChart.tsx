@@ -12,14 +12,18 @@ import {
 } from "recharts";
 import { usePolling } from "@/lib/use-polling";
 
+// Dedicated water-chemistry chart (EZO probes), a matched pair to
+// EnvironmentChart. pH (left axis) + EC (right axis, mS/cm) are the two a
+// grower watches together; Water Temp is a toggleable third series on its own
+// hidden axis. Colors match the water toggle-chips on EnvironmentChart.
+const PH_COLOR = "#a855f7"; // purple
+const EC_COLOR = "#f59e0b"; // amber
+const WTEMP_COLOR = "#06b6d4"; // cyan
+
 interface Reading {
   timestamp: string;
-  temperature: number | null;
-  humidity: number | null;
-  co2: number | null;
-  vpd: number | null;
   ph: number | null;
-  ec: number | null;
+  ec: number | null; // native µS/cm in the DB
   waterTemp: number | null;
 }
 
@@ -28,20 +32,16 @@ interface HistoryData {
   range: string;
 }
 
-// Optional water-chemistry series — only offered on zones that actually report
-// them. Keyed by the dataKey used in chartData.
-const WATER_SERIES = [
-  { key: "pH", field: "ph" as const, color: "#a855f7", unit: "", axis: "ph", domain: [0, 14] as [number, number] },
-  { key: "EC", field: "ec" as const, color: "#f59e0b", unit: " mS/cm", axis: "ec", domain: ["auto", "auto"] as ["auto", "auto"] },
-  { key: "Water Temp", field: "waterTemp" as const, color: "#06b6d4", unit: "°C", axis: "wtemp", domain: ["dataMin - 1", "dataMax + 1"] as [string, string] },
-];
-
 const UNIT_BY_NAME: Record<string, string> = {
-  Temperature: "°C",
-  Humidity: "%",
   pH: "",
   EC: " mS/cm",
   "Water Temp": "°C",
+};
+
+const DECIMALS_BY_NAME: Record<string, number> = {
+  pH: 2,
+  EC: 2,
+  "Water Temp": 1,
 };
 
 function formatTime(timestamp: string, range: string): string {
@@ -60,7 +60,10 @@ function CustomTooltip({ active, payload, label }: any) {
       <p className="mb-1 text-text-mid">{label}</p>
       {payload.map((p: { name: string; value: number; color: string }) => (
         <p key={p.name} style={{ color: p.color }}>
-          {p.name}: <span className="font-mono">{p.value.toFixed(1)}</span>
+          {p.name}:{" "}
+          <span className="font-mono">
+            {p.value.toFixed(DECIMALS_BY_NAME[p.name] ?? 1)}
+          </span>
           {UNIT_BY_NAME[p.name] ?? ""}
         </p>
       ))}
@@ -68,72 +71,56 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
-export default function EnvironmentChart({ zoneId }: { zoneId: string }) {
+export default function WaterChart({ zoneId }: { zoneId: string }) {
   const [range, setRange] = useState("24h");
-  // Which optional water series are toggled on. Empty = chart looks exactly
-  // like the air-only version.
-  const [enabled, setEnabled] = useState<Record<string, boolean>>({});
+  const [showWaterTemp, setShowWaterTemp] = useState(true);
 
   const { data, isLoading } = usePolling<HistoryData>({
     url: `/api/dashboard/history/${zoneId}?range=${range}`,
-    intervalMs: 60_000, // refresh chart every 60s
+    intervalMs: 60_000,
   });
 
   const readings = data?.readings ?? [];
 
-  // Data-driven gate: only offer water series when this zone actually reports
-  // water chemistry. Non-water zones (Mushu, Urban Seeds, …) → no toggles, no
-  // extra axes, no legend entries — identical to before this change.
-  const hasWater = readings.some(
-    (r) => r.ph !== null || r.ec !== null || r.waterTemp !== null
-  );
-
   const chartData = readings.map((r) => ({
     time: formatTime(r.timestamp, range),
-    Temperature: r.temperature,
-    Humidity: r.humidity,
     pH: r.ph,
     // DB stores native µS/cm; convert ÷1000 to mS/cm for display only.
     EC: r.ec != null ? r.ec / 1000 : null,
     "Water Temp": r.waterTemp,
   }));
 
-  // Downsample for large datasets
+  // How many rows actually carry water chemistry — drives the empty state and
+  // whether to show dots for thin data.
+  const waterPointCount = readings.filter(
+    (r) => r.ph !== null || r.ec !== null || r.waterTemp !== null
+  ).length;
+
+  // Downsample for large datasets (same policy as EnvironmentChart)
   const maxPoints = range === "30d" ? 120 : range === "7d" ? 168 : chartData.length;
   const step = Math.max(1, Math.floor(chartData.length / maxPoints));
   const sampled = chartData.filter((_, i) => i % step === 0);
 
-  const activeWaterSeries = hasWater
-    ? WATER_SERIES.filter((s) => enabled[s.key])
-    : [];
+  // Thin data: make individual points visible instead of an invisible line.
+  const showDots = waterPointCount < 10;
 
   return (
     <div className="rounded-xl border border-border bg-bg-card p-4">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-medium text-text">Environment</h3>
+        <h3 className="text-sm font-medium text-text">Water Chemistry</h3>
         <div className="flex items-center gap-2">
-          {/* Water series toggles — only on water-enabled zones */}
-          {hasWater && (
-            <div className="flex gap-1">
-              {WATER_SERIES.map((s) => (
-                <button
-                  key={s.key}
-                  onClick={() =>
-                    setEnabled((e) => ({ ...e, [s.key]: !e[s.key] }))
-                  }
-                  className="rounded-md px-2 py-1 text-xs font-medium transition-colors"
-                  style={
-                    enabled[s.key]
-                      ? { backgroundColor: `${s.color}26`, color: s.color }
-                      : { color: "#4a6b55" }
-                  }
-                >
-                  {s.key}
-                </button>
-              ))}
-              <span className="mx-1 w-px bg-border" />
-            </div>
-          )}
+          <button
+            onClick={() => setShowWaterTemp((v) => !v)}
+            className="rounded-md px-2 py-1 text-xs font-medium transition-colors"
+            style={
+              showWaterTemp
+                ? { backgroundColor: `${WTEMP_COLOR}26`, color: WTEMP_COLOR }
+                : { color: "#4a6b55" }
+            }
+          >
+            Water Temp
+          </button>
+          <span className="mx-1 w-px bg-border" />
           <div className="flex gap-1">
             {(["24h", "7d", "30d"] as const).map((r) => (
               <button
@@ -156,17 +143,21 @@ export default function EnvironmentChart({ zoneId }: { zoneId: string }) {
           <div className="flex h-full items-center justify-center text-sm text-text-dim">
             Loading chart...
           </div>
+        ) : waterPointCount === 0 ? (
+          <div className="flex h-full items-center justify-center text-sm text-text-dim">
+            No water data yet
+          </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={sampled}>
               <defs>
-                <linearGradient id="gradTemp" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#4abe7b" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#4abe7b" stopOpacity={0} />
+                <linearGradient id="gradPh" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={PH_COLOR} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={PH_COLOR} stopOpacity={0} />
                 </linearGradient>
-                <linearGradient id="gradHumid" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                <linearGradient id="gradEc" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={EC_COLOR} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={EC_COLOR} stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e2e25" />
@@ -177,87 +168,100 @@ export default function EnvironmentChart({ zoneId }: { zoneId: string }) {
                 axisLine={{ stroke: "#1e2e25" }}
                 interval="preserveStartEnd"
               />
+              {/* LEFT: pH — auto-scaled tight around the data */}
               <YAxis
-                yAxisId="temp"
+                yAxisId="ph"
                 tick={{ fill: "#4a6b55", fontSize: 10 }}
                 tickLine={false}
                 axisLine={false}
-                domain={["dataMin - 1", "dataMax + 1"]}
-                tickFormatter={(v: number) => `${v}°`}
+                domain={["dataMin - 0.5", "dataMax + 0.5"]}
+                tickFormatter={(v: number) => v.toFixed(1)}
               />
+              {/* RIGHT: EC in mS/cm */}
               <YAxis
-                yAxisId="humid"
+                yAxisId="ec"
                 orientation="right"
                 tick={{ fill: "#4a6b55", fontSize: 10 }}
                 tickLine={false}
                 axisLine={false}
-                domain={[70, 100]}
-                tickFormatter={(v: number) => `${v}%`}
+                domain={[0, "dataMax + 0.5"]}
+                tickFormatter={(v: number) => `${v.toFixed(1)}`}
               />
-              {/* Hidden axes for any toggled-on water series */}
-              {activeWaterSeries.map((s) => (
+              {/* Hidden third axis for Water Temp so it never squashes pH/EC */}
+              {showWaterTemp && (
                 <YAxis
-                  key={s.axis}
-                  yAxisId={s.axis}
+                  yAxisId="wtemp"
                   hide
-                  domain={s.domain}
+                  domain={["dataMin - 1", "dataMax + 1"]}
                 />
-              ))}
+              )}
               <Tooltip content={<CustomTooltip />} />
               <Area
-                yAxisId="temp"
+                yAxisId="ph"
                 type="monotone"
-                dataKey="Temperature"
-                stroke="#4abe7b"
-                fill="url(#gradTemp)"
+                dataKey="pH"
+                stroke={PH_COLOR}
+                fill="url(#gradPh)"
                 strokeWidth={2}
-                dot={false}
+                dot={showDots}
+                connectNulls
               />
               <Area
-                yAxisId="humid"
+                yAxisId="ec"
                 type="monotone"
-                dataKey="Humidity"
-                stroke="#3b82f6"
-                fill="url(#gradHumid)"
+                dataKey="EC"
+                stroke={EC_COLOR}
+                fill="url(#gradEc)"
                 strokeWidth={2}
-                dot={false}
+                dot={showDots}
+                connectNulls
               />
-              {activeWaterSeries.map((s) => (
+              {showWaterTemp && (
                 <Area
-                  key={s.key}
-                  yAxisId={s.axis}
+                  yAxisId="wtemp"
                   type="monotone"
-                  dataKey={s.key}
-                  stroke={s.color}
+                  dataKey="Water Temp"
+                  stroke={WTEMP_COLOR}
                   fill="none"
                   strokeWidth={2}
-                  dot={false}
+                  dot={showDots}
                   connectNulls
                 />
-              ))}
+              )}
             </AreaChart>
           </ResponsiveContainer>
         )}
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-center gap-6 text-xs">
         <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-green" />
-          <span className="text-text-dim">Temperature</span>
+          <span
+            className="h-2 w-2 rounded-full"
+            style={{ backgroundColor: PH_COLOR }}
+          />
+          <span className="text-text-dim">pH</span>
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-blue" />
-          <span className="text-text-dim">Humidity</span>
+          <span
+            className="h-2 w-2 rounded-full"
+            style={{ backgroundColor: EC_COLOR }}
+          />
+          <span className="text-text-dim">EC (mS/cm)</span>
         </span>
-        {activeWaterSeries.map((s) => (
-          <span key={s.key} className="flex items-center gap-1.5">
+        {showWaterTemp && (
+          <span className="flex items-center gap-1.5">
             <span
               className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: s.color }}
+              style={{ backgroundColor: WTEMP_COLOR }}
             />
-            <span className="text-text-dim">{s.key}</span>
+            <span className="text-text-dim">Water Temp</span>
           </span>
-        ))}
+        )}
       </div>
+      {waterPointCount < 2 && (
+        <p className="mt-1 text-center text-[11px] text-text-dim">
+          No trend data — need at least 2 readings
+        </p>
+      )}
     </div>
   );
 }

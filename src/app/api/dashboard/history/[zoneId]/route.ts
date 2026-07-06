@@ -48,6 +48,9 @@ export async function GET(
         humidity: true,
         co2: true,
         vpd: true,
+        ph: true,
+        ec: true,
+        waterTemp: true,
       },
       orderBy: { timestamp: "asc" },
     });

@@ -136,6 +136,9 @@ export async function GET(
             humidity: sensor.humidity,
             co2: sensor.co2,
             vpd: sensor.vpd,
+            ph: sensor.ph,
+            ec: sensor.ec,
+            waterTemp: sensor.waterTemp,
             timestamp: sensor.timestamp,
           }
         : null,
@@ -145,8 +148,20 @@ export async function GET(
             humidity: sensorOneHourAgo.humidity,
             co2: sensorOneHourAgo.co2,
             vpd: sensorOneHourAgo.vpd,
+            ph: sensorOneHourAgo.ph,
+            ec: sensorOneHourAgo.ec,
+            waterTemp: sensorOneHourAgo.waterTemp,
           }
         : null,
+      // Data-driven gate: true only when the latest reading carries water
+      // chemistry. Zones without an EZO probe (Mushu, Urban Seeds, …) have all
+      // three NULL → false → water UI never renders. No Zone flag needed.
+      hasWater: !!(
+        sensor &&
+        (sensor.ph !== null ||
+          sensor.ec !== null ||
+          sensor.waterTemp !== null)
+      ),
       devices: devices.map((d: any) => ({
         id: d.id,
         type: d.deviceType,

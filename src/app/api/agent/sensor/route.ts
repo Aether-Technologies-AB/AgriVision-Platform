@@ -7,12 +7,18 @@ export async function POST(request: NextRequest) {
   if (error) return error;
 
   try {
-    const { zoneId, temperature, humidity, co2, vpd, battery } =
+    const { zoneId, temperature, humidity, co2, vpd, battery, ph, ec, waterTemp } =
       await request.json();
 
-    if (!zoneId || temperature === undefined || humidity === undefined) {
+    // temperature/humidity are optional: a dedicated water/CO2 agent pushes
+    // ph/ec/waterTemp/co2 without touching the air readings the GGS agent owns.
+    // Require zoneId + at least one sensor value so we never store an empty row.
+    const hasAnyMetric = [temperature, humidity, co2, vpd, ph, ec, waterTemp].some(
+      (v) => v !== undefined && v !== null
+    );
+    if (!zoneId || !hasAnyMetric) {
       return NextResponse.json(
-        { error: "zoneId, temperature, and humidity are required" },
+        { error: "zoneId and at least one sensor value are required" },
         { status: 400 }
       );
     }
@@ -38,11 +44,17 @@ export async function POST(request: NextRequest) {
       prisma.sensorReading.create({
         data: {
           zoneId,
-          temperature,
-          humidity,
+          temperature: temperature ?? null,
+          humidity: humidity ?? null,
           co2: co2 ?? null,
           vpd: vpd ?? null,
           battery: battery ?? null,
+          // Water-chemistry / reservoir (Atlas EZO) — optional; only zones with
+          // an EZO probe send these. Absent keys persist as NULL (no behavior
+          // change for existing air-only agents).
+          ph: ph ?? null,
+          ec: ec ?? null,
+          waterTemp: waterTemp ?? null,
         },
       }),
     ];

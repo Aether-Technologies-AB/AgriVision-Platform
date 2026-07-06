@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     // Build context sections
     const zoneSummary = zones.map((z: any) => {
       const s = z.sensorReadings[0];
-      return `  ${z.name}: ${z.agentStatus}${z.agentStatus === "ONLINE" ? "" : " (offline)"}, phase: ${z.currentPhase}, auto: ${z.autoMode ? "yes" : "no"}${s ? `, temp: ${s.temperature.toFixed(1)}°C, humidity: ${s.humidity.toFixed(0)}%, CO2: ${s.co2 ?? "N/A"} ppm` : ""}`;
+      return `  ${z.name}: ${z.agentStatus}${z.agentStatus === "ONLINE" ? "" : " (offline)"}, phase: ${z.currentPhase}, auto: ${z.autoMode ? "yes" : "no"}${s ? `, temp: ${s.temperature != null ? `${s.temperature.toFixed(1)}°C` : "N/A"}, humidity: ${s.humidity != null ? `${s.humidity.toFixed(0)}%` : "N/A"}, CO2: ${s.co2 ?? "N/A"} ppm` : ""}`;
     }).join("\n");
 
     const batchSummary = activeBatches.map((b: any) => {
