@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import SensorCard from "@/components/dashboard/SensorCard";
 import EnvironmentChart from "@/components/dashboard/EnvironmentChart";
+import WaterChart from "@/components/dashboard/WaterChart";
 import ActiveBatchCard from "@/components/dashboard/ActiveBatchCard";
 import CameraFeed from "@/components/dashboard/CameraFeed";
 import AIDecisionFeed from "@/components/dashboard/AIDecisionFeed";
@@ -494,6 +495,9 @@ export default function DashboardPage() {
             </div>
 
             <EnvironmentChart zoneId={selectedZoneId} />
+            {/* Water Chemistry chart — same hasWater gate as the water cards,
+                so non-water zones (Urban Seeds, Mushu, …) never render it. */}
+            {live?.hasWater && <WaterChart zoneId={selectedZoneId} />}
             <EnergyChart zoneId={selectedZoneId} />
             <ActiveBatchCard batch={live?.activeBatch ?? null} />
           </div>
