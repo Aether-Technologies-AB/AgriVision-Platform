@@ -191,11 +191,18 @@ model SensorReading {
   zoneId String
   zone   Zone   @relation(fields: [zoneId], references: [id])
 
-  temperature Float
+  temperature Float // AIR temperature in °C (do NOT overload with water temp)
   humidity    Float
   co2         Int?
   vpd         Float?
   battery     Int?
+
+  // Water-chemistry / reservoir sensing (Atlas Scientific EZO probes).
+  // All nullable — only zones with an EZO reservoir probe populate these;
+  // every other zone leaves them NULL and is unaffected.
+  ph        Float? // water pH (dimensionless, ~0–14)
+  ec        Float? // water electrical conductivity in µS/cm (EZO-EC native unit)
+  waterTemp Float? // water/reservoir temperature in °C — distinct from `temperature` (= AIR temp)
 
   timestamp DateTime @default(now())
 

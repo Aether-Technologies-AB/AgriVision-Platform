@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   if (error) return error;
 
   try {
-    const { zoneId, temperature, humidity, co2, vpd, battery } =
+    const { zoneId, temperature, humidity, co2, vpd, battery, ph, ec, waterTemp } =
       await request.json();
 
     if (!zoneId || temperature === undefined || humidity === undefined) {
@@ -43,6 +43,12 @@ export async function POST(request: NextRequest) {
           co2: co2 ?? null,
           vpd: vpd ?? null,
           battery: battery ?? null,
+          // Water-chemistry / reservoir (Atlas EZO) — optional; only zones with
+          // an EZO probe send these. Absent keys persist as NULL (no behavior
+          // change for existing air-only agents).
+          ph: ph ?? null,
+          ec: ec ?? null,
+          waterTemp: waterTemp ?? null,
         },
       }),
     ];

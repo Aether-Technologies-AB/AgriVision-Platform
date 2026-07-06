@@ -14,6 +14,9 @@ import {
   Building2,
   LayoutGrid,
   Zap,
+  FlaskConical,
+  Waves,
+  Droplet,
 } from "lucide-react";
 import SensorCard from "@/components/dashboard/SensorCard";
 import EnvironmentChart from "@/components/dashboard/EnvironmentChart";
@@ -67,6 +70,9 @@ interface LiveData {
     humidity: number;
     co2: number | null;
     vpd: number | null;
+    ph: number | null;
+    ec: number | null;
+    waterTemp: number | null;
     timestamp: string;
   } | null;
   sensorPrev: {
@@ -74,7 +80,11 @@ interface LiveData {
     humidity: number;
     co2: number | null;
     vpd: number | null;
+    ph: number | null;
+    ec: number | null;
+    waterTemp: number | null;
   } | null;
+  hasWater: boolean;
   devices: {
     id: string;
     type: string;
@@ -383,7 +393,10 @@ export default function DashboardPage() {
           <div className="space-y-4 lg:col-span-3">
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
               <SensorCard
-                label="Temperature"
+                // "Air Temp" only when water cards are also shown (so the two
+                // temps are never confused). On non-water zones it stays
+                // "Temperature" — byte-identical to before this change.
+                label={live?.hasWater ? "Air Temp" : "Temperature"}
                 value={live?.sensor?.temperature ?? null}
                 prevValue={live?.sensorPrev?.temperature ?? null}
                 unit="°C"
@@ -438,6 +451,46 @@ export default function DashboardPage() {
                   {live?.energy?.todayCostKr?.toFixed(1) ?? "--"} kr
                 </p>
               </div>
+
+              {/* Water-chemistry cards — render ONLY for zones with an EZO
+                  reservoir probe (live.hasWater). Zones without water data
+                  (Mushu, Urban Seeds, …) never reach this branch, so their
+                  card row is byte-for-byte identical to before this change. */}
+              {live?.hasWater && (
+                <>
+                  <SensorCard
+                    label="pH"
+                    value={live?.sensor?.ph ?? null}
+                    prevValue={live?.sensorPrev?.ph ?? null}
+                    unit="pH"
+                    icon={<FlaskConical className="h-4 w-4" />}
+                    decimals={2}
+                    goodRange={[5.5, 6.5]}
+                    warnRange={[5.0, 7.0]}
+                  />
+                  <SensorCard
+                    label="EC"
+                    // DB stores native µS/cm; convert ÷1000 for display only.
+                    value={live?.sensor?.ec != null ? live.sensor.ec / 1000 : null}
+                    prevValue={live?.sensorPrev?.ec != null ? live.sensorPrev.ec / 1000 : null}
+                    unit="mS/cm"
+                    icon={<Waves className="h-4 w-4" />}
+                    decimals={2}
+                    goodRange={[0.8, 2.0]}
+                    warnRange={[0.5, 2.5]}
+                  />
+                  <SensorCard
+                    label="Water Temp"
+                    value={live?.sensor?.waterTemp ?? null}
+                    prevValue={live?.sensorPrev?.waterTemp ?? null}
+                    unit="°C"
+                    icon={<Droplet className="h-4 w-4" />}
+                    decimals={1}
+                    goodRange={[18, 22]}
+                    warnRange={[16, 24]}
+                  />
+                </>
+              )}
             </div>
 
             <EnvironmentChart zoneId={selectedZoneId} />
