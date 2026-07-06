@@ -14,8 +14,8 @@ import { usePolling } from "@/lib/use-polling";
 
 interface Reading {
   timestamp: string;
-  temperature: number;
-  humidity: number;
+  temperature: number | null;
+  humidity: number | null;
   co2: number | null;
   vpd: number | null;
   ph: number | null;

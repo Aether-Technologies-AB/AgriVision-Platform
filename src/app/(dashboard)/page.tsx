@@ -58,16 +58,16 @@ interface ZoneMapData {
     healthScore: number | null;
   }[];
   sensor: {
-    temperature: number;
-    humidity: number;
+    temperature: number | null;
+    humidity: number | null;
     timestamp: string;
   } | null;
 }
 
 interface LiveData {
   sensor: {
-    temperature: number;
-    humidity: number;
+    temperature: number | null;
+    humidity: number | null;
     co2: number | null;
     vpd: number | null;
     ph: number | null;
@@ -76,8 +76,8 @@ interface LiveData {
     timestamp: string;
   } | null;
   sensorPrev: {
-    temperature: number;
-    humidity: number;
+    temperature: number | null;
+    humidity: number | null;
     co2: number | null;
     vpd: number | null;
     ph: number | null;

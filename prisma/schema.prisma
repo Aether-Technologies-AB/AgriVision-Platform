@@ -191,8 +191,11 @@ model SensorReading {
   zoneId String
   zone   Zone   @relation(fields: [zoneId], references: [id])
 
-  temperature Float // AIR temperature in °C (do NOT overload with water temp)
-  humidity    Float
+  // AIR temp/humidity are nullable so a dedicated water/CO2 agent can push a
+  // reading WITHOUT air data (a separate agent owns the air readings on the
+  // same zone). Air-only agents keep sending both — unchanged.
+  temperature Float? // AIR temperature in °C (do NOT overload with water temp)
+  humidity    Float?
   co2         Int?
   vpd         Float?
   battery     Int?

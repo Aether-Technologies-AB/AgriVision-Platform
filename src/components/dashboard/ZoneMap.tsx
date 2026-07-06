@@ -21,8 +21,8 @@ interface ZoneMapData {
   currentPhase: string;
   batches: ZoneBatch[];
   sensor: {
-    temperature: number;
-    humidity: number;
+    temperature: number | null;
+    humidity: number | null;
     timestamp: string;
   } | null;
 }
@@ -171,10 +171,14 @@ export default function ZoneMap({
               {zone.sensor ? (
                 <div className="flex items-center gap-3 text-[11px]">
                   <span className="font-mono text-text">
-                    {zone.sensor.temperature.toFixed(1)}°C
+                    {zone.sensor.temperature != null
+                      ? `${zone.sensor.temperature.toFixed(1)}°C`
+                      : "--°C"}
                   </span>
                   <span className="font-mono text-text">
-                    {zone.sensor.humidity.toFixed(0)}% RH
+                    {zone.sensor.humidity != null
+                      ? `${zone.sensor.humidity.toFixed(0)}% RH`
+                      : "--% RH"}
                   </span>
                   <span className="ml-auto text-text-dim">
                     {formatAgo(zone.sensor.timestamp)}
