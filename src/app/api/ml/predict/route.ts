@@ -159,10 +159,14 @@ export async function POST(request: NextRequest) {
         model.fileUrl
       );
 
-      const results = await session.run({ image: inputTensor });
-      // Output key may be "output" (single model) or first output name
-      const outputKey = Object.keys(results)[0];
-      const outputData = results[outputKey].data as Float32Array;
+      const inputName = session.inputNames[0];
+      const outputName = session.outputNames[0];
+      console.log(
+        `[ML] ${model.name}@v${model.version}: inputName="${inputName}" outputName="${outputName}"`
+      );
+
+      const results = await session.run({ [inputName]: inputTensor });
+      const outputData = results[outputName].data as Float32Array;
 
       allProbs.push(softmax(outputData));
     }
