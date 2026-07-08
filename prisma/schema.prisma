@@ -223,6 +223,13 @@ model Photo {
 
   analysis Json?
 
+  // Cloud photo retention: cap is enforced per zone (see src/lib/photo-retention.ts).
+  // When set, the rgb/depth blobs have been deleted from storage to free quota —
+  // this row (and `analysis`, used as ML training labels) is kept regardless.
+  // rgbUrl/depthUrl are stale once pruned; consumers that render images must
+  // filter on prunedAt, not on URL presence.
+  prunedAt DateTime?
+
   timestamp DateTime @default(now())
 
   @@index([zoneId, timestamp])

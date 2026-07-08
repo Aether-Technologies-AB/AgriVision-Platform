@@ -60,6 +60,9 @@ export async function GET(
       prisma.photo.findMany({
         where: {
           zoneId: batch.zoneId,
+          // Cloud retention prunes old blobs (see photo-retention.ts) — a
+          // pruned row's rgbUrl is stale, so exclude it from the gallery.
+          prunedAt: null,
           ...(batch.plantedAt
             ? {
                 timestamp: {

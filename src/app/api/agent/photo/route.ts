@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-key";
 import { put } from "@vercel/blob";
+import { enforcePhotoRetention } from "@/lib/photo-retention";
 
 // File types we accept for Blob upload
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -129,6 +130,14 @@ export async function POST(request: NextRequest) {
         analysis,
       },
     });
+
+    // Cap this zone's live blobs at the retention limit. Best-effort — a
+    // pruning failure must not turn a successful upload into a 500.
+    try {
+      await enforcePhotoRetention(zoneId);
+    } catch (err) {
+      console.error("Photo retention error (non-fatal):", err);
+    }
 
     return NextResponse.json({ id: photo.id }, { status: 201 });
   } catch (err) {
