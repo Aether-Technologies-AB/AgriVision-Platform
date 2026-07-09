@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CropFamily } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { resolveCropFamily } from "@/lib/crop-family";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -86,14 +88,25 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { cropType, substrate, bagCount, plantedAt, notes, substrateCost, laborCost } = body;
+    const {
+      cropType,
+      cropFamily,
+      substrate,
+      bagCount,
+      trayCount,
+      seedingDensityGSqm,
+      plantedAt,
+      notes,
+      substrateCost,
+      laborCost,
+    } = body;
 
     // Support both single zoneId and multi zoneIds
     const zoneIds: string[] = body.zoneIds || (body.zoneId ? [body.zoneId] : []);
 
-    if (zoneIds.length === 0 || !cropType || !bagCount || bagCount < 1) {
+    if (zoneIds.length === 0 || !cropType) {
       return NextResponse.json(
-        { error: "At least one zone, cropType, and bagCount (>= 1) are required" },
+        { error: "At least one zone and cropType are required" },
         { status: 400 }
       );
     }
@@ -114,6 +127,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Family resolution — must succeed BEFORE we start numbering batches.
+    // Per-zone since Zone.defaultCropFamily can differ. Reject with a clear
+    // error rather than guessing (see src/lib/crop-family.ts).
+    const familyByZone = new Map<string, CropFamily>();
+    for (const z of zones) {
+      const fam = resolveCropFamily({
+        explicit: cropFamily,
+        cropType,
+        zoneDefault: z.defaultCropFamily,
+      });
+      if (!fam) {
+        return NextResponse.json(
+          {
+            error:
+              `Cannot determine cropFamily for zone "${z.name}" with cropType="${cropType}". ` +
+              `Pass cropFamily explicitly (MUSHROOM|MICROGREEN) or set the zone's default family.`,
+          },
+          { status: 400 }
+        );
+      }
+      familyByZone.set(z.id, fam);
+    }
+
+    // Family-specific field validation — mushroom batches need bagCount,
+    // microgreen batches accept trayCount but don't require it (a tray count
+    // may not be known at creation time and can be filled in later).
+    const missingBagCount = Array.from(familyByZone.values()).some(
+      (f) => f === CropFamily.MUSHROOM
+    );
+    if (missingBagCount && (!bagCount || bagCount < 1)) {
+      return NextResponse.json(
+        { error: "bagCount (>= 1) is required for mushroom batches" },
+        { status: 400 }
+      );
+    }
+
     // Generate batch numbers — find highest existing number this year
     const year = new Date().getFullYear();
     const prefix = `B-${year}-`;
@@ -130,13 +179,21 @@ export async function POST(request: NextRequest) {
     for (const zId of zoneIds) {
       lastNum++;
       const batchNumber = `${prefix}${String(lastNum).padStart(3, "0")}`;
+      const family = familyByZone.get(zId)!;
+      const isMushroom = family === CropFamily.MUSHROOM;
       const batch = await prisma.batch.create({
         data: {
           batchNumber,
           zoneId: zId,
           cropType,
-          substrate: substrate || "straw",
-          bagCount,
+          cropFamily: family,
+          substrate: isMushroom ? (substrate ?? null) : null,
+          bagCount: isMushroom ? bagCount : null,
+          trayCount: !isMushroom && typeof trayCount === "number" ? trayCount : null,
+          seedingDensityGSqm:
+            !isMushroom && typeof seedingDensityGSqm === "number"
+              ? seedingDensityGSqm
+              : null,
           substrateCost: substrateCost ?? null,
           laborCost: laborCost ?? null,
           phase: "PLANNED",

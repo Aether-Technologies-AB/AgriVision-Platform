@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { BatchPhase, Prisma } from "@prisma/client";
+import { BatchPhase, CropFamily, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-key";
+import {
+  isPhaseValidForFamily,
+  resolveCropFamily,
+} from "@/lib/crop-family";
 
 const VALID_PHASES = new Set<BatchPhase>([
   BatchPhase.PLANNED,
@@ -56,8 +60,12 @@ export async function POST(request: NextRequest) {
       zoneId,
       batchNumber,
       cropType,
+      cropFamily,
       substrate,
       bagCount,
+      trayCount,
+      seedingDensityGSqm,
+      growthDay,
       phase,
       plantedAt,
       notes,
@@ -82,10 +90,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Family resolution: explicit → cropType lookup → zone default → reject.
+    // No silent MUSHROOM fallback (see src/lib/crop-family.ts).
+    const resolvedFamily = resolveCropFamily({
+      explicit: cropFamily,
+      cropType,
+      zoneDefault: zone.defaultCropFamily,
+    });
+    if (!resolvedFamily) {
+      return NextResponse.json(
+        {
+          error:
+            `Cannot determine cropFamily for cropType="${cropType}". ` +
+            `Pass cropFamily explicitly (MUSHROOM|MICROGREEN), or configure ` +
+            `Zone.defaultCropFamily for zone ${zoneId}.`,
+        },
+        { status: 400 }
+      );
+    }
+
     const resolvedPhase = coercePhase(phase);
     if (phase !== undefined && phase !== null && !resolvedPhase) {
       return NextResponse.json(
         { error: `Invalid phase: ${phase}` },
+        { status: 400 }
+      );
+    }
+
+    const finalPhase = resolvedPhase ?? BatchPhase.PLANNED;
+    if (!isPhaseValidForFamily(resolvedFamily, finalPhase)) {
+      return NextResponse.json(
+        {
+          error: `Phase ${finalPhase} is not valid for cropFamily=${resolvedFamily}.`,
+        },
         { status: 400 }
       );
     }
@@ -110,9 +147,39 @@ export async function POST(request: NextRequest) {
       batchNumber,
       zoneId,
       cropType,
-      substrate: substrate ?? "straw",
-      bagCount: typeof bagCount === "number" && bagCount > 0 ? bagCount : 1,
-      phase: resolvedPhase ?? BatchPhase.PLANNED,
+      cropFamily: resolvedFamily,
+      // Family-specific fields — only carry the ones that belong to this
+      // family on create. Mushroom batches leave microgreen fields null and
+      // vice-versa. Note there is no "straw" default anymore: a Pi that
+      // registers a microgreen batch would otherwise inherit a mushroom
+      // substrate label.
+      substrate:
+        resolvedFamily === CropFamily.MUSHROOM ? (substrate ?? null) : null,
+      bagCount:
+        resolvedFamily === CropFamily.MUSHROOM
+          ? typeof bagCount === "number" && bagCount > 0
+            ? bagCount
+            : null
+          : null,
+      trayCount:
+        resolvedFamily === CropFamily.MICROGREEN
+          ? typeof trayCount === "number" && trayCount > 0
+            ? trayCount
+            : null
+          : null,
+      seedingDensityGSqm:
+        resolvedFamily === CropFamily.MICROGREEN
+          ? typeof seedingDensityGSqm === "number"
+            ? seedingDensityGSqm
+            : null
+          : null,
+      growthDay:
+        resolvedFamily === CropFamily.MICROGREEN
+          ? typeof growthDay === "number"
+            ? growthDay
+            : null
+          : null,
+      phase: finalPhase,
       plantedAt: planted,
       notes: typeof notes === "string" ? notes : null,
     };
@@ -123,9 +190,15 @@ export async function POST(request: NextRequest) {
     const updateData: Prisma.BatchUncheckedUpdateInput = { zoneId, cropType };
     if (substrate !== undefined) updateData.substrate = substrate;
     if (typeof bagCount === "number" && bagCount > 0) updateData.bagCount = bagCount;
+    if (typeof trayCount === "number" && trayCount > 0) updateData.trayCount = trayCount;
+    if (typeof seedingDensityGSqm === "number") updateData.seedingDensityGSqm = seedingDensityGSqm;
+    if (typeof growthDay === "number") updateData.growthDay = growthDay;
     if (resolvedPhase) updateData.phase = resolvedPhase;
     if (planted) updateData.plantedAt = planted;
     if (notes !== undefined) updateData.notes = notes;
+    // Don't overwrite cropFamily on update — once a batch is classified it
+    // stays classified; changing family mid-life is not a supported operation
+    // via this endpoint.
 
     const batch = await prisma.batch.upsert({
       where: { batchNumber },
@@ -138,8 +211,12 @@ export async function POST(request: NextRequest) {
         id: batch.id,
         batchNumber: batch.batchNumber,
         cropType: batch.cropType,
+        cropFamily: batch.cropFamily,
         substrate: batch.substrate,
         bagCount: batch.bagCount,
+        trayCount: batch.trayCount,
+        seedingDensityGSqm: batch.seedingDensityGSqm,
+        growthDay: batch.growthDay,
         phase: batch.phase,
         plantedAt: batch.plantedAt,
         zoneId: batch.zoneId,
@@ -183,8 +260,12 @@ export async function GET(request: NextRequest) {
     id: batch.id,
     batchNumber: batch.batchNumber,
     cropType: batch.cropType,
+    cropFamily: batch.cropFamily,
     substrate: batch.substrate,
     bagCount: batch.bagCount,
+    trayCount: batch.trayCount,
+    seedingDensityGSqm: batch.seedingDensityGSqm,
+    growthDay: batch.growthDay,
     phase: batch.phase,
     plantedAt: batch.plantedAt,
     zoneId: batch.zoneId,

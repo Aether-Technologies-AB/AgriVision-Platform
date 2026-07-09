@@ -58,11 +58,15 @@ export async function GET(
             timestamp: true,
           },
         }),
-        // Active batch — prioritize by most recent plantedAt (real batches first)
+        // Active batch — anything that isn't pre-start (PLANNED) or finished
+        // (HARVESTED / CANCELLED). This used to whitelist only mushroom phases
+        // and silently drop every microgreens batch on the Urban Seeds Rack.
+        // Now we blacklist the terminal + pending states so any future phase
+        // (mushroom or microgreens) is picked up automatically.
         prisma.batch.findFirst({
           where: {
             zoneId,
-            phase: { in: ["COLONIZATION", "FRUITING", "READY_TO_HARVEST"] },
+            phase: { notIn: ["PLANNED", "HARVESTED", "CANCELLED"] },
           },
           orderBy: { plantedAt: "desc" },
         }),
@@ -182,12 +186,15 @@ export async function GET(
             id: activeBatch.id,
             batchNumber: activeBatch.batchNumber,
             cropType: activeBatch.cropType,
+            cropFamily: activeBatch.cropFamily,
             phase: activeBatch.phase,
             day: batchDay,
             estCycleDays,
             estHarvestDate: activeBatch.estHarvestDate,
             estYieldKg: activeBatch.estYieldKg,
             healthScore: activeBatch.healthScore,
+            trayCount: activeBatch.trayCount,
+            growthDay: activeBatch.growthDay,
           }
         : null,
       recentDecisions,

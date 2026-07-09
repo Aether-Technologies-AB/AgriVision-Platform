@@ -115,6 +115,11 @@ export default function BatchForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           zoneIds: selectedZoneIds,
+          // This form only offers mushroom crops (see cropOptions above).
+          // The family selector + microgreen fields land in PR 2 — until
+          // then, tag every batch this form creates as MUSHROOM so the
+          // server-side family resolver doesn't have to guess.
+          cropFamily: "MUSHROOM",
           cropType: finalCrop,
           substrate: finalSubstrate,
           bagCount,

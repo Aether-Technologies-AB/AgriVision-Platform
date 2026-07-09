@@ -10,7 +10,8 @@
     "lint": "eslint",
     "db:push": "npx prisma db push",
     "db:seed": "npx tsx prisma/seed.mts",
-    "db:studio": "npx prisma studio"
+    "db:studio": "npx prisma studio",
+    "test": "node --import tsx --test 'src/**/*.test.ts'"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.mts"

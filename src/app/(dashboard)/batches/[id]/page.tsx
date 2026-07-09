@@ -40,14 +40,16 @@ const cropLabels: Record<string, string> = {
   microgreens: "Microgreens",
 };
 
-const MICROGREENS_CROP_TYPES = new Set(["microgreens"]);
-
 interface BatchDetail {
   id: string;
   batchNumber: string;
   cropType: string;
-  substrate: string;
-  bagCount: number;
+  cropFamily: "MUSHROOM" | "MICROGREEN" | null;
+  substrate: string | null;
+  bagCount: number | null;
+  trayCount: number | null;
+  seedingDensityGSqm: number | null;
+  growthDay: number | null;
   phase: string;
   day: number | null;
   estCycleDays: number | null;
@@ -210,7 +212,14 @@ export default function BatchDetailPage() {
           </div>
           <p className="mt-1 text-sm text-text-mid">
             {cropLabels[batch.cropType] || batch.cropType} &middot;{" "}
-            {batch.zone.name} &middot; {batch.bagCount} bags ({batch.substrate})
+            {batch.zone.name} &middot;{" "}
+            {batch.cropFamily === "MICROGREEN"
+              ? `${batch.trayCount ?? "?"} trays${
+                  batch.growthDay !== null ? ` · day ${batch.growthDay}` : ""
+                }`
+              : `${batch.bagCount ?? "?"} bags${
+                  batch.substrate ? ` (${batch.substrate})` : ""
+                }`}
             &middot; Created{" "}
             {new Date(batch.createdAt).toLocaleDateString("sv-SE")}
           </p>
@@ -219,7 +228,9 @@ export default function BatchDetailPage() {
         {/* Phase actions */}
         <div className="flex gap-2">
           {(() => {
-            const isMicrogreens = MICROGREENS_CROP_TYPES.has(batch.cropType);
+            // cropFamily is the source of truth. cropType (the variety) no
+            // longer drives which progression path we show.
+            const isMicrogreens = batch.cropFamily === "MICROGREEN";
             const phaseAction = (
               label: string,
               next: string,

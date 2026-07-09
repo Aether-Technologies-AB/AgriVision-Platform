@@ -102,6 +102,13 @@ model Zone {
   currentPhase  GrowthPhase @default(IDLE)
   autoMode      Boolean     @default(true)
 
+  // Optional — the family this zone usually runs. Used to (a) pre-select the
+  // family picker in the New Batch form, and (b) resolve the agent's
+  // /api/agent/batch upsert when it doesn't send `cropFamily` explicitly.
+  // NULL means "no default", not "any family allowed" — a Pi upsert against
+  // such a zone with no explicit family will be rejected (no silent guess).
+  defaultCropFamily CropFamily?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -137,9 +144,23 @@ model Batch {
   zoneId      String
   zone        Zone       @relation(fields: [zoneId], references: [id])
 
-  cropType  String
-  substrate String     @default("straw")
-  bagCount  Int
+  // Family drives which phase set + which family-specific fields apply.
+  // Nullable at the column level until the PR 3 migration flips it to NOT
+  // NULL; PR 1 code paths refuse to create a Batch without one.
+  cropFamily CropFamily?
+  // Variety within the family — free string ("Sakura", "oyster_blue", …).
+  cropType   String
+
+  // Mushroom-only fields. Nullable so a MICROGREEN batch can leave them null.
+  // The mushroom-side "straw" default is intentionally gone: it silently
+  // labelled every batch (including microgreens) as substrate=straw.
+  substrate String?
+  bagCount  Int?
+
+  // Microgreen-only fields. Nullable for MUSHROOM batches.
+  trayCount           Int?
+  seedingDensityGSqm  Float?
+  growthDay           Int?
 
   substrateCost Float?
   laborCost     Float?
@@ -184,6 +205,15 @@ enum BatchPhase {
   POST_GERMINATION
   ACTIVE_GROWING
   PRE_HARVEST
+}
+
+// Crop family determines which BatchPhase values are legal on a Batch and
+// which family-specific fields are populated. See src/lib/crop-family.ts for
+// the phase/field split — the DB CHECK constraint that enforces the pairing
+// lands in PR 3 (holding this here as an app-level invariant for PR 1).
+enum CropFamily {
+  MUSHROOM
+  MICROGREEN
 }
 
 model SensorReading {
