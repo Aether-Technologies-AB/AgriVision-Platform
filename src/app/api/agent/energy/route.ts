@@ -4,20 +4,59 @@ import { validateApiKey } from "@/lib/api-key";
 
 type Reading = { deviceName: string; kWh: number };
 
+// A counter must fall below this to even be considered a genuine reset.
+// Tapo/Shelly counters reboot to ~0, they don't drop to "a bit less than
+// before" — a drop that doesn't land near zero is measurement jitter, not
+// a reset (see computeDelta below).
+const RESET_NEAR_ZERO_KWH = 1.0;
+// Ceiling on plausible power draw for a single metered device/circuit, used
+// to size the per-interval delta cap. Generous on purpose — sized to never
+// clip a real farm-wide device, only to catch impossible spikes.
+const MAX_DEVICE_KW = 10;
+// Floor on the elapsed-time window used for the cap, so two pushes that
+// land seconds apart (same-batch duplicate, fast retry) don't get an
+// unbounded cap.
+const MIN_ELAPSED_HOURS = 1 / 60;
+
 /**
  * Compute the consumption since the previous poll for one device.
  *
- *   - No prior reading: delta = 0. The first push from a device tells us
- *     where the counter is, not what it consumed — we can't bill that.
- *   - current < previous: counter reset (Shelly reboot, Tapo midnight
- *     rollover). Treat the new reading itself as the delta — it's what the
- *     device has consumed since the reset.
- *   - Otherwise: delta = current - previous.
+ * Readings are cumulative lifetime counters. Two failure modes matter:
+ *
+ *   1. Genuine counter reset (device reboot / firmware rollover): the
+ *      counter restarts near zero. Detected only when `current` itself is
+ *      near zero AND `previous` was well above that — not merely
+ *      `current < previous`. A real reset drop is "most of the counter",
+ *      not "a hair less than before".
+ *   2. Non-monotonic jitter: Tapo's rolling energy estimate isn't perfectly
+ *      monotonic between two closely-spaced polls, so `current` can be a
+ *      few grams-of-a-Wh below `previous` with no reset involved. Treating
+ *      that as a reset (old behavior: delta = current) bills the ENTIRE
+ *      lifetime counter as one interval's consumption — this produced
+ *      ~29-30 kWh false spikes once an hour. The fix: any drop that doesn't
+ *      qualify as a genuine reset contributes zero, never a negative or a
+ *      full-counter delta.
+ *
+ * Every delta (reset or forward-moving) is additionally capped at what's
+ * physically plausible for the elapsed interval, so a single bad reading
+ * can never blow up the sum even if it slips past the rules above.
  */
-function computeDelta(current: number, previous: number | null): number {
+function computeDelta(
+  current: number,
+  previous: number | null,
+  elapsedHours: number
+): number {
   if (previous === null || previous === undefined) return 0;
-  if (current < previous) return current;
-  return current - previous;
+
+  const maxPlausibleDelta = MAX_DEVICE_KW * Math.max(elapsedHours, MIN_ELAPSED_HOURS);
+
+  if (current < previous) {
+    const isGenuineReset = current < RESET_NEAR_ZERO_KWH && previous > RESET_NEAR_ZERO_KWH;
+    if (isGenuineReset) return Math.min(current, maxPlausibleDelta);
+    return 0;
+  }
+
+  return Math.min(current - previous, maxPlausibleDelta);
 }
 
 export async function POST(request: NextRequest) {
@@ -54,17 +93,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Pull every device's prior counter in one query, indexed by deviceName.
+    // Pull every device's prior counter + last-seen time in one query.
     const deviceNames = Array.from(new Set(readings.map((r) => r.deviceName)));
     const priorStates = await prisma.deviceEnergyState.findMany({
       where: { farmId, deviceName: { in: deviceNames } },
     });
     const priorByDevice = new Map<string, number>();
-    for (const s of priorStates) priorByDevice.set(s.deviceName, s.lastCounterKwh);
+    const priorTimeByDevice = new Map<string, Date>();
+    for (const s of priorStates) {
+      priorByDevice.set(s.deviceName, s.lastCounterKwh);
+      priorTimeByDevice.set(s.deviceName, s.updatedAt);
+    }
 
     // If the same device shows up twice in one batch, process in order and
     // carry the running counter forward in-memory so the second reading's
-    // delta is correct without needing a DB roundtrip between rows.
+    // delta is correct without needing a DB roundtrip between rows. The
+    // second occurrence's "prior time" becomes this request's start time,
+    // which collapses its elapsed-time window to the MIN_ELAPSED_HOURS
+    // floor — appropriately conservative, since a legitimate second reading
+    // for the same device within one push shouldn't represent real hours
+    // of consumption anyway.
+    const now = new Date();
     const rows: {
       farmId: string;
       zoneId: string | null;
@@ -78,7 +127,9 @@ export async function POST(request: NextRequest) {
       const prev = priorByDevice.has(r.deviceName)
         ? priorByDevice.get(r.deviceName)!
         : null;
-      const deltaKwh = computeDelta(r.kWh, prev);
+      const priorTime = priorTimeByDevice.get(r.deviceName) ?? null;
+      const elapsedHours = priorTime ? (now.getTime() - priorTime.getTime()) / 3_600_000 : 24;
+      const deltaKwh = computeDelta(r.kWh, prev, elapsedHours);
       rows.push({
         farmId,
         zoneId: zoneId || null,
@@ -88,6 +139,7 @@ export async function POST(request: NextRequest) {
         costKr: deltaKwh * farm.electricityPriceKrPerKwh,
       });
       priorByDevice.set(r.deviceName, r.kWh);
+      priorTimeByDevice.set(r.deviceName, now);
     }
 
     // Write rows + upsert each device's running counter. Sequential upserts
