@@ -26,13 +26,16 @@ export async function GET(request: NextRequest) {
         include: {
           farm: { select: { id: true, name: true } },
           batches: {
+            // Show anything that isn't finished/cancelled — includes microgreens
+            // phases (GERMINATION, POST_GERMINATION, ACTIVE_GROWING, PRE_HARVEST).
             where: {
-              phase: { in: ["PLANNED", "COLONIZATION", "FRUITING", "READY_TO_HARVEST"] },
+              phase: { notIn: ["HARVESTED", "CANCELLED"] },
             },
             select: {
               id: true,
               batchNumber: true,
               cropType: true,
+              cropFamily: true,
               phase: true,
               plantedAt: true,
               estHarvestDate: true,
@@ -79,7 +82,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ zones: result });
     }
 
-    // Simple list for dropdowns
+    // Simple list for dropdowns — includes defaultCropFamily so the New Batch
+    // form can pre-select the right family per zone.
     const zones = await prisma.zone.findMany({
       where,
       select: {
@@ -87,6 +91,7 @@ export async function GET(request: NextRequest) {
         name: true,
         agentStatus: true,
         currentPhase: true,
+        defaultCropFamily: true,
         farm: { select: { id: true, name: true } },
       },
       orderBy: { name: "asc" },
