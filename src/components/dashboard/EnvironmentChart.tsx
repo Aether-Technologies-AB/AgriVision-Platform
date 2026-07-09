@@ -44,8 +44,8 @@ const UNIT_BY_NAME: Record<string, string> = {
   "Water Temp": "°C",
 };
 
-function formatTime(timestamp: string, range: string): string {
-  const d = new Date(timestamp);
+function formatTick(ms: number, range: string): string {
+  const d = new Date(ms);
   if (range === "24h") {
     return d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
   }
@@ -55,9 +55,19 @@ function formatTime(timestamp: string, range: string): string {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
+  // label is epoch ms now that XAxis is numeric; format for the user.
+  const labelText =
+    typeof label === "number"
+      ? new Date(label).toLocaleString("sv-SE", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : String(label);
   return (
     <div className="rounded-lg border border-border bg-bg-card px-3 py-2 text-xs shadow-lg">
-      <p className="mb-1 text-text-mid">{label}</p>
+      <p className="mb-1 text-text-mid">{labelText}</p>
       {payload.map((p: { name: string; value: number; color: string }) => (
         <p key={p.name} style={{ color: p.color }}>
           {p.name}: <span className="font-mono">{p.value.toFixed(1)}</span>
@@ -88,8 +98,14 @@ export default function EnvironmentChart({ zoneId }: { zoneId: string }) {
     (r) => r.ph !== null || r.ec !== null || r.waterTemp !== null
   );
 
+  // X-axis uses epoch ms as a numeric dimension so points land at their
+  // actual time, not evenly-spaced by array index. Without this, a burst of
+  // 26 readings arriving within one second stretches across the full chart
+  // width and gets 26 ticks all labeled the same minute — the Pi's sparse /
+  // bursty push cadence used to make 24h look like a solid data band when
+  // it was really two clusters an hour apart.
   const chartData = readings.map((r) => ({
-    time: formatTime(r.timestamp, range),
+    t: new Date(r.timestamp).getTime(),
     Temperature: r.temperature,
     Humidity: r.humidity,
     pH: r.ph,
@@ -171,11 +187,14 @@ export default function EnvironmentChart({ zoneId }: { zoneId: string }) {
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e2e25" />
               <XAxis
-                dataKey="time"
+                dataKey="t"
+                type="number"
+                scale="time"
+                domain={["dataMin", "dataMax"]}
                 tick={{ fill: "#4a6b55", fontSize: 10 }}
                 tickLine={false}
                 axisLine={{ stroke: "#1e2e25" }}
-                interval="preserveStartEnd"
+                tickFormatter={(v: number) => formatTick(v, range)}
               />
               <YAxis
                 yAxisId="temp"
