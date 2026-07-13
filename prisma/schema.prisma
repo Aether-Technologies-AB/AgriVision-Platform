@@ -260,9 +260,15 @@ model Photo {
   // filter on prunedAt, not on URL presence.
   prunedAt DateTime?
 
+  // Inference-worker contract: null = needs detection, set = a worker has
+  // posted a result (ok or failed) via POST /api/analysis/results. Set on
+  // both outcomes so a bad image can't be re-pulled forever.
+  analyzedAt DateTime?
+
   timestamp DateTime @default(now())
 
   @@index([zoneId, timestamp])
+  @@index([analyzedAt])
 }
 
 model AIDecision {
