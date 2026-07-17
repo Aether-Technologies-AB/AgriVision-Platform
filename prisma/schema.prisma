@@ -74,7 +74,7 @@ model Farm {
   createdAt      DateTime     @default(now())
 
   // Cost defaults
-  electricityPriceKrPerKwh  Float @default(1.50)
+  electricityPriceKrPerKwh   Float @default(1.50)
   defaultSubstrateCostPerBag Float @default(15.0)
   defaultLaborCostPerBatch   Float @default(200.0)
   defaultMarketPrices        Json? // e.g. {"oyster_blue": 150, "lions_mane": 250}
@@ -93,9 +93,9 @@ model Zone {
   farmId String
   farm   Farm   @relation(fields: [farmId], references: [id])
 
-  cameraType  String?
-  sensorUrl   String?
-  plugIds     Json?
+  cameraType String?
+  sensorUrl  String?
+  plugIds    Json?
 
   agentStatus   AgentStatus @default(OFFLINE)
   agentLastSeen DateTime?
@@ -112,12 +112,13 @@ model Zone {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  batches        Batch[]
-  sensorReadings SensorReading[]
-  photos         Photo[]
-  deviceStates   DeviceState[]
-  commands       Command[]
-  energyReadings EnergyReading[]
+  batches          Batch[]
+  sensorReadings   SensorReading[]
+  photos           Photo[]
+  deviceStates     DeviceState[]
+  commands         Command[]
+  energyReadings   EnergyReading[]
+  siteObservations SiteObservation[]
 
   @@index([farmId])
 }
@@ -139,10 +140,10 @@ enum GrowthPhase {
 // ─── Core data ───
 
 model Batch {
-  id          String     @id @default(cuid())
-  batchNumber String     @unique
+  id          String @id @default(cuid())
+  batchNumber String @unique
   zoneId      String
-  zone        Zone       @relation(fields: [zoneId], references: [id])
+  zone        Zone   @relation(fields: [zoneId], references: [id])
 
   // Family drives which phase set + which family-specific fields apply.
   // Nullable at the column level until the PR 3 migration flips it to NOT
@@ -158,9 +159,9 @@ model Batch {
   bagCount  Int?
 
   // Microgreen-only fields. Nullable for MUSHROOM batches.
-  trayCount           Int?
-  seedingDensityGSqm  Float?
-  growthDay           Int?
+  trayCount          Int?
+  seedingDensityGSqm Float?
+  growthDay          Int?
 
   substrateCost Float?
   laborCost     Float?
@@ -186,9 +187,12 @@ model Batch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  aiDecisions    AIDecision[]
-  harvests       Harvest[]
-  scheduleEvents ScheduleEvent[]
+  aiDecisions      AIDecision[]
+  harvests         Harvest[]
+  scheduleEvents   ScheduleEvent[]
+  sensorReadings   SensorReading[]
+  photos           Photo[]
+  siteObservations SiteObservation[]
 
   @@index([zoneId])
   @@index([phase])
@@ -214,12 +218,23 @@ enum BatchPhase {
 enum CropFamily {
   MUSHROOM
   MICROGREEN
+  // Added for the Pilot Basement lettuce/basil trait-ingestion pipeline
+  // (SiteObservation). Additive only — MUSHROOM/MICROGREEN rows and code
+  // paths are untouched. Not yet wired into any phase/field split; batches
+  // in Floor 1/Floor 2 don't exist yet for this crop family.
+  LEAFY_GREEN
 }
 
 model SensorReading {
   id     String @id @default(cuid())
   zoneId String
   zone   Zone   @relation(fields: [zoneId], references: [id])
+
+  // Resolved server-side at ingest via getActiveBatchId — nullable because a
+  // reading with no active batch in its zone is valid and must still be
+  // stored (see src/lib/active-batch.ts).
+  batchId String?
+  batch   Batch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   // AIR temp/humidity are nullable so a dedicated water/CO2 agent can push a
   // reading WITHOUT air data (a separate agent owns the air readings on the
@@ -241,12 +256,18 @@ model SensorReading {
 
   @@index([zoneId, timestamp])
   @@index([timestamp])
+  @@index([batchId])
 }
 
 model Photo {
   id     String @id @default(cuid())
   zoneId String
   zone   Zone   @relation(fields: [zoneId], references: [id])
+
+  // Resolved server-side at ingest via getActiveBatchId — same nullability
+  // rationale as SensorReading.batchId above.
+  batchId String?
+  batch   Batch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   rgbUrl   String
   depthUrl String?
@@ -267,14 +288,17 @@ model Photo {
 
   timestamp DateTime @default(now())
 
+  siteObservations SiteObservation[]
+
   @@index([zoneId, timestamp])
+  @@index([batchId])
   @@index([analyzedAt])
 }
 
 model AIDecision {
-  id      String @id @default(cuid())
+  id      String  @id @default(cuid())
   batchId String?
-  batch   Batch? @relation(fields: [batchId], references: [id])
+  batch   Batch?  @relation(fields: [batchId], references: [id])
 
   decisionType DecisionType
   decision     String
@@ -325,16 +349,16 @@ model Harvest {
 }
 
 model ScheduleEvent {
-  id      String @id @default(cuid())
+  id      String  @id @default(cuid())
   batchId String?
-  batch   Batch? @relation(fields: [batchId], references: [id])
+  batch   Batch?  @relation(fields: [batchId], references: [id])
 
   eventType   ScheduleEventType
   title       String
   description String?
   scheduledAt DateTime
   completedAt DateTime?
-  status      EventStatus @default(PENDING)
+  status      EventStatus       @default(PENDING)
 
   createdAt DateTime @default(now())
 
@@ -366,11 +390,11 @@ enum DeviceScope {
 }
 
 model DeviceState {
-  id     String @id @default(cuid())
+  id     String      @id @default(cuid())
   farmId String
-  farm   Farm   @relation(fields: [farmId], references: [id])
+  farm   Farm        @relation(fields: [farmId], references: [id])
   zoneId String?
-  zone   Zone?  @relation(fields: [zoneId], references: [id])
+  zone   Zone?       @relation(fields: [zoneId], references: [id])
   scope  DeviceScope @default(ZONE)
 
   deviceType  DeviceType
@@ -394,11 +418,11 @@ enum DeviceType {
 }
 
 model EnergyReading {
-  id     String @id @default(cuid())
+  id     String  @id @default(cuid())
   farmId String
-  farm   Farm   @relation(fields: [farmId], references: [id])
+  farm   Farm    @relation(fields: [farmId], references: [id])
   zoneId String?
-  zone   Zone?  @relation(fields: [zoneId], references: [id])
+  zone   Zone?   @relation(fields: [zoneId], references: [id])
 
   deviceName String
   // kWh = the raw counter value the Pi reported on this poll (Shelly
@@ -425,15 +449,15 @@ model EnergyReading {
 // here on purpose, because Tapo/Shelly counters are device-local, not
 // zone-local.
 model DeviceEnergyState {
-  id              String   @id @default(cuid())
-  farmId          String
-  deviceName      String
+  id             String   @id @default(cuid())
+  farmId         String
+  deviceName     String
   // The last counter value we saw from this device. On the next reading we
   // compute current - lastCounterKwh; if current < lastCounterKwh we treat it
   // as a counter reset (Shelly reboot / Tapo midnight rollover) and bill the
   // new reading as the delta.
-  lastCounterKwh  Float
-  updatedAt       DateTime @updatedAt
+  lastCounterKwh Float
+  updatedAt      DateTime @updatedAt
 
   @@unique([farmId, deviceName])
 }
@@ -445,6 +469,7 @@ model Command {
 
   command    String
   payload    Json?
+  source     CommandSource @default(MANUAL)
   status     CommandStatus @default(PENDING)
   issuedAt   DateTime      @default(now())
   executedAt DateTime?
@@ -459,6 +484,12 @@ enum CommandStatus {
   EXECUTED
   FAILED
   EXPIRED
+}
+
+enum CommandSource {
+  MANUAL
+  RULE
+  AI
 }
 
 // ─── ML Model Registry ───
@@ -481,4 +512,127 @@ model MLModel {
 
   @@unique([name, version])
   @@index([name, isActive])
+}
+
+// ─── Lettuce/basil trait ingestion (Pilot Basement pilot) ───
+//
+// One row per (rail, cycleId, siteId, viewAngleDeg) trait record produced by
+// an off-platform GPU box running detection locally on RGB-D camera-rail
+// scans. Images stay on the GPU box; only traits + a few representative
+// photos travel. A "site" is a physical net-pot (e.g. "row06_ch2"), imaged
+// from 3 rail stops per cycle (~-18/0/+18deg off-nadir) plus one FUSED
+// record merging those views into a 3D reconstruction — up to 4 rows per
+// site per cycle. Traits are recorded even for an empty/rejected pot so
+// drift is visible rather than silent (see plantPresent/rejectReason).
+//
+// This exists to serve one query fast and indexed, not via a JSON scan:
+// "site X's canopy volume over the last 8 weeks" -> @@index([siteId, capturedAt]).
+//
+// Additive-only alongside Photo/Batch/Zone: no existing column was touched
+// to add this. Rail<->zone mapping lives in src/lib/rail-zones.ts (app-level
+// config), not a schema column — see that file for why.
+model SiteObservation {
+  id String @id @default(cuid())
+
+  zoneId String
+  zone   Zone   @relation(fields: [zoneId], references: [id])
+
+  // Resolved server-side via the same getActiveBatchId() helper
+  // /api/agent/photo uses — null is valid (no active batch in this zone yet).
+  batchId String?
+  batch   Batch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  // Traceability to the representative image, if one was uploaded for this
+  // record. Most records won't have one — only "a few representative images"
+  // travel per the pipeline design.
+  photoId String?
+  photo   Photo?  @relation(fields: [photoId], references: [id], onDelete: SetNull)
+
+  rail    String // "rail1" | "rail2" — validated against zone at ingest
+  cycleId String // e.g. "2026-07-16_12-27-24", one GPU-box run over the rail
+  siteId  String // permanent physical net-pot id, e.g. "row06_ch2"
+
+  globalRow Int
+  channel   Int
+  stop      Int
+
+  // Null for the FUSED record (producer sends the literal string "fused"
+  // there, not a number) — isFused is the authoritative flag, this is null
+  // only in that one case.
+  viewAngleDeg  Float?
+  isFused       Boolean @default(false)
+  isPrimaryView Boolean
+  nViewsFused   Int? // fused records only, e.g. 3
+  fusionGainPct Float? // fused records only
+
+  capturedAt DateTime
+
+  plantPresent Boolean
+  rejectReason String?
+
+  areaPx          Int?
+  areaCm2         Float?
+  canopyVolumeCm3 Float?
+  heightMmMax     Float?
+  heightMmMean    Float?
+  heightProfileMm Json?
+  widthMm         Float?
+  lengthMm        Float?
+  coverage        Float?
+  exgMean         Float?
+  exgStd          Float?
+  labAMean        Float?
+  deepGreenFrac   Float?
+  depthValidPct   Float?
+  clippedByRoi    Boolean?
+
+  channelPlaneMm Float?
+  fx             Float?
+
+  // Not calibrated yet — always null until a calibration pass exists.
+  // See src/app/api/observations/route.ts: the endpoint forces this to
+  // null server-side regardless of what a producer sends.
+  freshWeightGEst    Float?
+  calibrationVersion String?
+
+  schemaVersion Int
+
+  createdAt DateTime @default(now())
+
+  // ============================================================================
+  // !! THIS DECLARATION IS A STAND-IN, NOT THE REAL CONSTRAINT !!
+  //
+  // The REAL constraint is `... NULLS NOT DISTINCT`, and it lives ONLY in the
+  // hand-written SQL of migration 20260717115014_add_site_observation_and_leafy_green
+  // (prisma/migrations/20260717115014_add_site_observation_and_leafy_green/migration.sql).
+  // Prisma's schema DSL (confirmed against Prisma 7.5) has no way to express
+  // NULLS NOT DISTINCT — `@@unique(..., nullsNotDistinct: true)` fails schema
+  // validation with "No such argument" — so the line below is a plain UNIQUE,
+  // present only so the Prisma Client has a typed compound-unique key to
+  // upsert against.
+  //
+  // A plain UNIQUE treats every NULL as distinct from every other NULL. The
+  // FUSED row (viewAngleDeg IS NULL, isFused true) relies entirely on
+  // NULLS NOT DISTINCT to dedupe on repost. If `prisma migrate dev` (or any
+  // diff/regeneration tool) is ever run against this model — e.g. after the
+  // corrupted baseline migration (20260712190829_baseline, stray dotenv log
+  // on line 1) is eventually fixed and shadow-DB diffing starts working again
+  // — it WILL propose "fixing" this index back to a plain UNIQUE, and that
+  // change WILL SILENTLY BREAK FUSED-ROW IDEMPOTENCY: every repost of a
+  // cycle would then insert a brand-new duplicate fused row instead of
+  // updating the existing one, with no error raised anywhere.
+  //
+  // src/app/api/observations/route.test.ts is the guard against this — it
+  // asserts a fused record reposted twice still resolves to exactly one row.
+  // If that test ever starts failing, this is why: check the live index with
+  //   SELECT pg_get_indexdef(indexrelid) FROM pg_index
+  //   WHERE indrelid = '"SiteObservation"'::regclass;
+  // and confirm "NULLS NOT DISTINCT" is still present. If a migration
+  // regenerated this constraint without it, hand-add NULLS NOT DISTINCT back
+  // to the generated CREATE UNIQUE INDEX statement before applying.
+  // ============================================================================
+  @@unique([rail, cycleId, siteId, viewAngleDeg, isFused])
+  @@index([siteId, capturedAt])
+  @@index([zoneId, capturedAt])
+  @@index([cycleId])
 }

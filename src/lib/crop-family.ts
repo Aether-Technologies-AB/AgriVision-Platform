@@ -24,6 +24,31 @@ export const PHASES_BY_FAMILY: Record<CropFamily, ReadonlySet<BatchPhase>> = {
     BatchPhase.HARVESTED,
     BatchPhase.CANCELLED,
   ]),
+  // Placeholder: LEAFY_GREEN was added for the Pilot Basement SiteObservation
+  // pipeline, which doesn't create/read Batch rows at all (batchId is
+  // resolved best-effort and nullable). No product decision has been made
+  // yet on this family's own phase set, so it borrows MICROGREEN's — the
+  // closest existing lifecycle shape (germination -> active growth ->
+  // harvest). Revisit when/if a LEAFY_GREEN batch flow is actually built.
+  //
+  // TODO(LEAFY_GREEN phases): THIS IS A COMPILE STUB, NOT REAL LETTUCE/BASIL
+  // PHENOLOGY. It exists only so TypeScript's exhaustiveness check on
+  // Record<CropFamily, ...> compiles after adding the LEAFY_GREEN enum value
+  // for SiteObservation. No one has designed lettuce/basil growth phases —
+  // germination/post_germination/active_growing/pre_harvest are borrowed
+  // from microgreens sight-unseen and may be wrong (different crop, likely
+  // different phase timing/shape). If a LEAFY_GREEN Batch is ever created,
+  // whoever wires that up MUST replace this set with real phases first —
+  // do not assume this list is correct just because it type-checks.
+  [CropFamily.LEAFY_GREEN]: new Set<BatchPhase>([
+    BatchPhase.PLANNED,
+    BatchPhase.GERMINATION,
+    BatchPhase.POST_GERMINATION,
+    BatchPhase.ACTIVE_GROWING,
+    BatchPhase.PRE_HARVEST,
+    BatchPhase.HARVESTED,
+    BatchPhase.CANCELLED,
+  ]),
 };
 
 /**
@@ -44,6 +69,9 @@ export const TERMINAL_OR_PENDING_PHASES: ReadonlySet<BatchPhase> = new Set([
 export const FIRST_ACTIVE_PHASE: Record<CropFamily, BatchPhase> = {
   [CropFamily.MUSHROOM]: BatchPhase.COLONIZATION,
   [CropFamily.MICROGREEN]: BatchPhase.GERMINATION,
+  // TODO(LEAFY_GREEN phases): compile stub, not real phenology — see the
+  // TODO on PHASES_BY_FAMILY above.
+  [CropFamily.LEAFY_GREEN]: BatchPhase.GERMINATION,
 };
 
 export function isPhaseValidForFamily(
