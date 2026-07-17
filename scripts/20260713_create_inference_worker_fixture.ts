@@ -68,7 +68,7 @@ async function makeDepthPng(width: number, height: number): Promise<Buffer> {
       raw.writeUInt16BE(value, idx); // sharp raw->png for 16-bit expects big-endian
     }
   }
-  return sharp(raw, { raw: { width, height, channels: 1, premultiplied: false, depth: "ushort" } })
+  return sharp(raw, { raw: { width, height, channels: 1, premultiplied: false, depth: "ushort" } as sharp.CreateRaw })
     .png()
     .toBuffer();
 }
