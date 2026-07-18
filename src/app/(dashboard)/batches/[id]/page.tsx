@@ -51,6 +51,7 @@ interface BatchDetail {
   bagCount: number | null;
   trayCount: number | null;
   seedingDensityGSqm: number | null;
+  plantCount: number | null;
   growthDay: number | null;
   phase: string;
   day: number | null;
@@ -217,8 +218,8 @@ export default function BatchDetailPage() {
             {batch.zone.name} &middot;{" "}
             {batch.cropFamily !== "MUSHROOM"
               ? `${batch.trayCount ?? "?"} trays${
-                  batch.growthDay !== null ? ` · day ${batch.growthDay}` : ""
-                }`
+                  batch.plantCount !== null ? ` · ${batch.plantCount} plants` : ""
+                }${batch.growthDay !== null ? ` · day ${batch.growthDay}` : ""}`
               : `${batch.bagCount ?? "?"} bags${
                   batch.substrate ? ` (${batch.substrate})` : ""
                 }`}

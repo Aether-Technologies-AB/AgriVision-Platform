@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
       bagCount,
       trayCount,
       seedingDensityGSqm,
+      plantCount,
       plantedAt,
       notes,
       substrateCost,
@@ -194,6 +195,8 @@ export async function POST(request: NextRequest) {
             !isMushroom && typeof seedingDensityGSqm === "number"
               ? seedingDensityGSqm
               : null,
+          plantCount:
+            !isMushroom && typeof plantCount === "number" ? plantCount : null,
           substrateCost: substrateCost ?? null,
           laborCost: laborCost ?? null,
           phase: "PLANNED",

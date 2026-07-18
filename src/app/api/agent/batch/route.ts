@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
       bagCount,
       trayCount,
       seedingDensityGSqm,
+      plantCount,
       growthDay,
       phase,
       plantedAt,
@@ -173,6 +174,12 @@ export async function POST(request: NextRequest) {
             ? seedingDensityGSqm
             : null
           : null,
+      plantCount:
+        resolvedFamily !== CropFamily.MUSHROOM
+          ? typeof plantCount === "number" && plantCount > 0
+            ? plantCount
+            : null
+          : null,
       growthDay:
         resolvedFamily !== CropFamily.MUSHROOM
           ? typeof growthDay === "number"
@@ -192,6 +199,7 @@ export async function POST(request: NextRequest) {
     if (typeof bagCount === "number" && bagCount > 0) updateData.bagCount = bagCount;
     if (typeof trayCount === "number" && trayCount > 0) updateData.trayCount = trayCount;
     if (typeof seedingDensityGSqm === "number") updateData.seedingDensityGSqm = seedingDensityGSqm;
+    if (typeof plantCount === "number" && plantCount > 0) updateData.plantCount = plantCount;
     if (typeof growthDay === "number") updateData.growthDay = growthDay;
     if (resolvedPhase) updateData.phase = resolvedPhase;
     if (planted) updateData.plantedAt = planted;
@@ -216,6 +224,7 @@ export async function POST(request: NextRequest) {
         bagCount: batch.bagCount,
         trayCount: batch.trayCount,
         seedingDensityGSqm: batch.seedingDensityGSqm,
+        plantCount: batch.plantCount,
         growthDay: batch.growthDay,
         phase: batch.phase,
         plantedAt: batch.plantedAt,
@@ -265,6 +274,7 @@ export async function GET(request: NextRequest) {
     bagCount: batch.bagCount,
     trayCount: batch.trayCount,
     seedingDensityGSqm: batch.seedingDensityGSqm,
+    plantCount: batch.plantCount,
     growthDay: batch.growthDay,
     phase: batch.phase,
     plantedAt: batch.plantedAt,

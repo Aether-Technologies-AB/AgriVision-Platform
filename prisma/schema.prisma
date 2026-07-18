@@ -163,6 +163,12 @@ model Batch {
   seedingDensityGSqm Float?
   growthDay          Int?
 
+  // Production unit for individually-spaced crops (basil, lettuce). Unlike
+  // seedingDensityGSqm (a seeded mat by weight), leafy greens are countable
+  // plants — "32 basil plants in 1 tray". Nullable for families that don't
+  // count individual plants.
+  plantCount Int?
+
   substrateCost Float?
   laborCost     Float?
 

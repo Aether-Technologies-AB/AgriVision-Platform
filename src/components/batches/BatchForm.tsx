@@ -81,6 +81,7 @@ export default function BatchForm({
   const [customSubstrate, setCustomSubstrate] = useState("");
   const [bagCount, setBagCount] = useState(10);
   const [trayCount, setTrayCount] = useState(4);
+  const [plantCount, setPlantCount] = useState("");
   const [seedingDensity, setSeedingDensity] = useState("");
   const [plantedAt, setPlantedAt] = useState("");
   const [notes, setNotes] = useState("");
@@ -138,6 +139,7 @@ export default function BatchForm({
 
   const allSelected = zones.length > 0 && selectedZoneIds.length === zones.length;
   const isMushroom = family === "MUSHROOM";
+  const isLeafyGreen = family === "LEAFY_GREEN";
 
   function toggleZone(id: string) {
     setSelectedZoneIds((prev) =>
@@ -197,6 +199,7 @@ export default function BatchForm({
       } else {
         body.trayCount = trayCount;
         if (seedingDensity) body.seedingDensityGSqm = Number(seedingDensity);
+        if (isLeafyGreen && plantCount) body.plantCount = Number(plantCount);
       }
 
       const res = await fetch("/api/batches", {
@@ -221,6 +224,7 @@ export default function BatchForm({
       setCustomSubstrate("");
       setBagCount(10);
       setTrayCount(4);
+      setPlantCount("");
       setSeedingDensity("");
       setPlantedAt("");
       setNotes("");
@@ -423,6 +427,25 @@ export default function BatchForm({
                   />
                 </div>
               </div>
+
+              {isLeafyGreen && (
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-text-mid">
+                    Plant Count (optional)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={plantCount}
+                    onChange={(e) => setPlantCount(e.target.value)}
+                    placeholder="e.g. 32 plants"
+                    className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-text-dim focus:border-green focus:outline-none"
+                  />
+                  <p className="mt-1 text-[11px] text-text-dim">
+                    Individually-spaced plants across the tray(s) — e.g. 32 basil plants.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="mb-1 block text-xs font-medium text-text-mid">

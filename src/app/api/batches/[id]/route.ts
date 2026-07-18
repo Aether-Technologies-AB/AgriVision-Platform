@@ -66,6 +66,7 @@ export async function GET(
       bagCount: batch.bagCount,
       trayCount: batch.trayCount,
       seedingDensityGSqm: batch.seedingDensityGSqm,
+      plantCount: batch.plantCount,
       growthDay: batch.growthDay,
       phase: batch.phase,
       day,
