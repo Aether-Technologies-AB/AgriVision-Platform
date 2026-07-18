@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
         {
           error:
             `Cannot determine cropFamily for cropType="${cropType}". ` +
-            `Pass cropFamily explicitly (MUSHROOM|MICROGREEN), or configure ` +
+            `Pass cropFamily explicitly (MUSHROOM|MICROGREEN|LEAFY_GREEN), or configure ` +
             `Zone.defaultCropFamily for zone ${zoneId}.`,
         },
         { status: 400 }
@@ -162,19 +162,19 @@ export async function POST(request: NextRequest) {
             : null
           : null,
       trayCount:
-        resolvedFamily === CropFamily.MICROGREEN
+        resolvedFamily !== CropFamily.MUSHROOM
           ? typeof trayCount === "number" && trayCount > 0
             ? trayCount
             : null
           : null,
       seedingDensityGSqm:
-        resolvedFamily === CropFamily.MICROGREEN
+        resolvedFamily !== CropFamily.MUSHROOM
           ? typeof seedingDensityGSqm === "number"
             ? seedingDensityGSqm
             : null
           : null,
       growthDay:
-        resolvedFamily === CropFamily.MICROGREEN
+        resolvedFamily !== CropFamily.MUSHROOM
           ? typeof growthDay === "number"
             ? growthDay
             : null

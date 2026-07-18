@@ -109,6 +109,9 @@ const CROP_TYPE_TO_FAMILY: Record<string, CropFamily> = {
   broccoli: CropFamily.MICROGREEN,
   kale: CropFamily.MICROGREEN,
   arugula: CropFamily.MICROGREEN,
+  // Leafy greens (Pilot Basement)
+  lettuce: CropFamily.LEAFY_GREEN,
+  basil: CropFamily.LEAFY_GREEN,
 };
 
 export function familyFromCropType(cropType: string): CropFamily | null {
@@ -131,7 +134,11 @@ export function resolveCropFamily(args: {
 
   if (explicit) {
     const upper = String(explicit).toUpperCase();
-    if (upper === CropFamily.MUSHROOM || upper === CropFamily.MICROGREEN) {
+    if (
+      upper === CropFamily.MUSHROOM ||
+      upper === CropFamily.MICROGREEN ||
+      upper === CropFamily.LEAFY_GREEN
+    ) {
       return upper as CropFamily;
     }
   }

@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
           {
             error:
               `Cannot determine cropFamily for zone "${z.name}" with cropType="${cropType}". ` +
-              `Pass cropFamily explicitly (MUSHROOM|MICROGREEN) or set the zone's default family.`,
+              `Pass cropFamily explicitly (MUSHROOM|MICROGREEN|LEAFY_GREEN) or set the zone's default family.`,
           },
           { status: 400 }
         );

@@ -38,13 +38,15 @@ const cropLabels: Record<string, string> = {
   lions_mane: "Lion's Mane",
   shiitake: "Shiitake",
   microgreens: "Microgreens",
+  lettuce: "Lettuce",
+  basil: "Basil",
 };
 
 interface BatchDetail {
   id: string;
   batchNumber: string;
   cropType: string;
-  cropFamily: "MUSHROOM" | "MICROGREEN" | null;
+  cropFamily: "MUSHROOM" | "MICROGREEN" | "LEAFY_GREEN" | null;
   substrate: string | null;
   bagCount: number | null;
   trayCount: number | null;
@@ -213,7 +215,7 @@ export default function BatchDetailPage() {
           <p className="mt-1 text-sm text-text-mid">
             {cropLabels[batch.cropType] || batch.cropType} &middot;{" "}
             {batch.zone.name} &middot;{" "}
-            {batch.cropFamily === "MICROGREEN"
+            {batch.cropFamily !== "MUSHROOM"
               ? `${batch.trayCount ?? "?"} trays${
                   batch.growthDay !== null ? ` · day ${batch.growthDay}` : ""
                 }`
@@ -229,8 +231,10 @@ export default function BatchDetailPage() {
         <div className="flex gap-2">
           {(() => {
             // cropFamily is the source of truth. cropType (the variety) no
-            // longer drives which progression path we show.
-            const isMicrogreens = batch.cropFamily === "MICROGREEN";
+            // longer drives which progression path we show. LEAFY_GREEN
+            // currently borrows MICROGREEN's phase set (see crop-family.ts),
+            // so it follows the same progression UI for now.
+            const isMicrogreens = batch.cropFamily !== "MUSHROOM";
             const phaseAction = (
               label: string,
               next: string,

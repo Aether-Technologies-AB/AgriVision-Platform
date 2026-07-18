@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { X, Loader2, CheckSquare, Square } from "lucide-react";
 
-type CropFamily = "MUSHROOM" | "MICROGREEN";
+type CropFamily = "MUSHROOM" | "MICROGREEN" | "LEAFY_GREEN";
 
 interface Zone {
   id: string;
@@ -42,6 +42,11 @@ const CROPS_BY_FAMILY: Record<CropFamily, { value: string; label: string }[]> = 
     { value: "microgreens", label: "Microgreens (mix)" },
     { value: "custom", label: "Custom" },
   ],
+  LEAFY_GREEN: [
+    { value: "lettuce", label: "Lettuce" },
+    { value: "basil", label: "Basil" },
+    { value: "custom", label: "Custom" },
+  ],
 };
 
 const SUBSTRATE_OPTIONS = [
@@ -54,6 +59,7 @@ const SUBSTRATE_OPTIONS = [
 const FAMILY_LABEL: Record<CropFamily, string> = {
   MUSHROOM: "Mushrooms",
   MICROGREEN: "Microgreens",
+  LEAFY_GREEN: "Leafy Greens",
 };
 
 export default function BatchForm({
@@ -291,7 +297,7 @@ export default function BatchForm({
           <div>
             <label className="mb-1 block text-xs font-medium text-text-mid">Crop Family</label>
             <div className="flex gap-2">
-              {(["MUSHROOM", "MICROGREEN"] as const).map((f) => (
+              {(["MUSHROOM", "MICROGREEN", "LEAFY_GREEN"] as const).map((f) => (
                 <button
                   key={f}
                   type="button"
@@ -333,7 +339,13 @@ export default function BatchForm({
                 type="text"
                 value={customCrop}
                 onChange={(e) => setCustomCrop(e.target.value)}
-                placeholder={isMushroom ? "Enter mushroom variety" : "Enter microgreen variety"}
+                placeholder={
+                  isMushroom
+                    ? "Enter mushroom variety"
+                    : family === "LEAFY_GREEN"
+                      ? "Enter leafy green variety"
+                      : "Enter microgreen variety"
+                }
                 className="mt-2 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-text-dim focus:border-green focus:outline-none"
               />
             )}
