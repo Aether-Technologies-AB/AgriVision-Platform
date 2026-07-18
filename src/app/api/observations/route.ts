@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-key";
 import { getActiveBatchId } from "@/lib/active-batch";
 import { railForZone } from "@/lib/rail-zones";
+import { markAgentSeen } from "@/lib/agent-liveness";
 
 // Batch trait ingestion for the Pilot Basement lettuce/basil pipeline. One
 // call per (rail, cycle) — up to ~132 records (site x view-angle, plus one
@@ -415,6 +416,13 @@ export async function POST(request: NextRequest) {
 
   const ok = results.filter((r) => r.status === "ok").length;
   const failed = results.length - ok;
+
+  // The camera rail pushing traits is a live edge agent — mark the zone seen
+  // so it doesn't read OFFLINE while actively ingesting. Only when at least one
+  // record persisted, and best-effort (never fails the ingest response).
+  if (ok > 0) {
+    await markAgentSeen(zone);
+  }
 
   return NextResponse.json(
     { zoneId, rail: expectedRail, batchId, received: records.length, ok, failed, results },

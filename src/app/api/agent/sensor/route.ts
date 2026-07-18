@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-key";
 import { getActiveBatchId } from "@/lib/active-batch";
+import { agentSeenUpdate } from "@/lib/agent-liveness";
 
 export async function POST(request: NextRequest) {
   const { error, apiKey } = await validateApiKey(request);
@@ -37,10 +38,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const stale =
-      !zone.agentLastSeen ||
-      Date.now() - new Date(zone.agentLastSeen).getTime() > 3600_000;
-
     // Best-effort batch stamping — losing the association is acceptable,
     // losing the reading is not.
     let batchId: string | null = null;
@@ -70,17 +67,9 @@ export async function POST(request: NextRequest) {
       }),
     ];
 
-    if (stale || zone.agentStatus !== "ONLINE") {
-      writes.push(
-        prisma.zone.update({
-          where: { id: zoneId },
-          data: {
-            agentStatus: "ONLINE",
-            agentLastSeen: new Date(),
-          },
-        })
-      );
-    }
+    // Mark the zone's agent alive (shared with the other edge-ingest routes).
+    const livenessWrite = agentSeenUpdate(zone);
+    if (livenessWrite) writes.push(livenessWrite);
 
     const [reading] = (await Promise.all(writes)) as [{ id: string }];
 

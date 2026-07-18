@@ -18,7 +18,7 @@ export async function GET(
     // Verify zone belongs to user's org
     const zone = await prisma.zone.findUnique({
       where: { id: zoneId },
-      include: { farm: true },
+      include: { farm: true, climateZone: { include: { farm: true } } },
     });
 
     if (!zone || zone.farm.organizationId !== session.user.organizationId) {
@@ -27,6 +27,17 @@ export async function GET(
         { status: 404 }
       );
     }
+
+    // Environment source zone: the Environment chart follows the same climate
+    // link as the live sensor cards (see dashboard/live route). Own zone unless
+    // a same-farm climate link is set; a null/cross-tenant link falls back to
+    // own readings, so unlinked zones are unchanged.
+    const envZoneId =
+      zone.climateZone &&
+      zone.climateZone.farm.organizationId === session.user.organizationId &&
+      zone.climateZone.farmId === zone.farmId
+        ? zone.climateZone.id
+        : zoneId;
 
     // Calculate time range
     const rangeMs: Record<string, number> = {
@@ -39,7 +50,7 @@ export async function GET(
 
     const readings = await prisma.sensorReading.findMany({
       where: {
-        zoneId,
+        zoneId: envZoneId,
         timestamp: { gte: since },
       },
       select: {

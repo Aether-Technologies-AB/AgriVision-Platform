@@ -17,7 +17,7 @@ export async function GET(
     // Verify zone belongs to user's org
     const zone = await prisma.zone.findUnique({
       where: { id: zoneId },
-      include: { farm: true },
+      include: { farm: true, climateZone: { include: { farm: true } } },
     });
 
     if (!zone || zone.farm.organizationId !== session.user.organizationId) {
@@ -27,12 +27,27 @@ export async function GET(
       );
     }
 
+    // Environment source zone: a floor zone with no sensors of its own can
+    // link to a climate zone (Zone.climateZoneId) that supplies its air + water
+    // readings. Resolve to the linked zone ONLY when it exists and is in the
+    // same farm/org (tenancy guard) — a null or cross-tenant link falls back to
+    // the zone's own readings, so unlinked zones are byte-identical to before.
+    // Scope is deliberately narrow: ONLY sensor/water data reads from this id.
+    // Liveness, photos, batch, decisions, energy all stay on the URL zone.
+    const envZoneId =
+      zone.climateZone &&
+      zone.climateZone.farm.organizationId === session.user.organizationId &&
+      zone.climateZone.farmId === zone.farmId
+        ? zone.climateZone.id
+        : zoneId;
+
     // Fetch latest data in parallel
     const [sensor, devices, latestPhoto, activeBatch, recentDecisions] =
       await Promise.all([
-        // Latest sensor reading
+        // Latest sensor reading — from the environment source zone (own zone
+        // unless a same-farm climate link is configured).
         prisma.sensorReading.findFirst({
-          where: { zoneId },
+          where: { zoneId: envZoneId },
           orderBy: { timestamp: "desc" },
         }),
         // Device states — zone-specific + farm-wide, updated in last hour
@@ -107,11 +122,12 @@ export async function GET(
       _sum: { deltaKwh: true, costKr: true },
     });
 
-    // Get sensor reading from ~1h ago for trend comparison
+    // Get sensor reading from ~1h ago for trend comparison — same environment
+    // source zone as the latest reading above.
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     const sensorOneHourAgo = await prisma.sensorReading.findFirst({
       where: {
-        zoneId,
+        zoneId: envZoneId,
         timestamp: { lte: oneHourAgo },
       },
       orderBy: { timestamp: "desc" },

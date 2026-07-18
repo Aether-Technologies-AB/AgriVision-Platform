@@ -109,6 +109,19 @@ model Zone {
   // such a zone with no explicit family will be rejected (no silent guess).
   defaultCropFamily CropFamily?
 
+  // Optional link to another zone that supplies this zone's ENVIRONMENT
+  // (air temp/humidity/CO2/VPD + water chemistry) readings. For a floor zone
+  // that has no sensors of its own but shares a reservoir/climate with a
+  // dedicated climate zone (e.g. Floor 2 -> GGS Climate). NULL means "use my
+  // own readings" — the default for every existing zone, so behavior is
+  // unchanged unless a link is explicitly set. ONLY environment/sensor/water
+  // data follows this link; liveness (agentStatus/agentLastSeen), photos,
+  // traits, and batches stay on the zone itself. The linked zone must be in
+  // the same farm/org — enforced at read time (see dashboard/live + history).
+  climateZoneId String?
+  climateZone   Zone?   @relation("ZoneClimateSource", fields: [climateZoneId], references: [id], onDelete: SetNull)
+  climateFor    Zone[]  @relation("ZoneClimateSource")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -121,6 +134,7 @@ model Zone {
   siteObservations SiteObservation[]
 
   @@index([farmId])
+  @@index([climateZoneId])
 }
 
 enum AgentStatus {

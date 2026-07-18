@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-key";
+import { markAgentSeen } from "@/lib/agent-liveness";
 
 type Reading = { deviceName: string; kWh: number };
 
@@ -156,6 +157,20 @@ export async function POST(request: NextRequest) {
         });
       }),
     ]);
+
+    // For a zone-scoped push, the edge agent is alive — mark its zone seen.
+    // Skipped for farm-wide readings (zoneId null: no single zone to attribute
+    // liveness to). Tenancy: only if the zone actually belongs to this farm.
+    // Best-effort — never fails a successful energy write.
+    if (zoneId) {
+      const zone = await prisma.zone.findUnique({
+        where: { id: zoneId },
+        select: { id: true, farmId: true, agentLastSeen: true, agentStatus: true },
+      });
+      if (zone && zone.farmId === farmId) {
+        await markAgentSeen(zone);
+      }
+    }
 
     return NextResponse.json(
       {

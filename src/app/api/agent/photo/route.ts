@@ -4,6 +4,7 @@ import { validateApiKey } from "@/lib/api-key";
 import { put } from "@vercel/blob";
 import { enforcePhotoRetention } from "@/lib/photo-retention";
 import { getActiveBatchId } from "@/lib/active-batch";
+import { markAgentSeen } from "@/lib/agent-liveness";
 
 // File types we accept for Blob upload
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -69,6 +70,9 @@ export async function POST(request: NextRequest) {
           analysis,
         },
       });
+
+      // Edge agent uploaded a photo — mark its zone alive (best-effort).
+      await markAgentSeen(zone);
 
       return NextResponse.json(
         { id: photo.id, warning: "BLOB_READ_WRITE_TOKEN not configured, photo stored as reference only" },
@@ -150,6 +154,9 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       console.error("Photo retention error (non-fatal):", err);
     }
+
+    // Edge agent uploaded a photo — mark its zone alive (best-effort).
+    await markAgentSeen(zone);
 
     return NextResponse.json({ id: photo.id }, { status: 201 });
   } catch (err) {
