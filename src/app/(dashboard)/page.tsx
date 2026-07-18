@@ -27,7 +27,9 @@ import AIDecisionFeed from "@/components/dashboard/AIDecisionFeed";
 import DeviceControl from "@/components/dashboard/DeviceControl";
 import EnergyChart from "@/components/dashboard/EnergyChart";
 import ZoneMap from "@/components/dashboard/ZoneMap";
+import TraitGrowthChart from "@/components/dashboard/TraitGrowthChart";
 import { usePolling } from "@/lib/use-polling";
+import { railForZone } from "@/lib/rail-zones";
 
 interface Farm {
   id: string;
@@ -500,6 +502,12 @@ export default function DashboardPage() {
             {live?.hasWater && <WaterChart zoneId={selectedZoneId} />}
             <EnergyChart zoneId={selectedZoneId} />
             <ActiveBatchCard batch={live?.activeBatch ?? null} />
+            {/* Camera-rail trait rollup — only on rail-configured floor zones
+                (Pilot Basement Floor 1/2). Every other zone renders identically
+                to before. Reads traits from THIS zone (never the climate link). */}
+            {railForZone(selectedZoneId) && (
+              <TraitGrowthChart zoneId={selectedZoneId} />
+            )}
           </div>
 
           {/* Right column - 2/5 */}
