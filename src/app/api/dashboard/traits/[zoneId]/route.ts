@@ -85,11 +85,19 @@ export async function GET(
 
     const since = new Date(Date.now() - (RANGE_MS[range] || RANGE_MS["30d"]));
 
-    // One representative FUSED row per (day, site) = latest capture that day
-    // (DISTINCT ON), then aggregate across sites per day. This collapses the
-    // ~4 rows/site/cycle and any multi-cycle days to one value per site/day.
+    // One REPRESENTATIVE row per (day, site), then aggregate across sites per
+    // day. Selection order (matches the pipeline: fusion only happens when
+    // multiple views exist; nadir is the primary single view):
+    //   1. fused row if one exists  (isFused DESC)
+    //   2. else the nadir view      (smallest |viewAngleDeg|; NULLS FIRST keeps
+    //                                the fused row — null angle — ahead anyway)
+    //   3. latest capture that day  (capturedAt DESC) as the final tiebreak
+    // This collapses the ~4 rows/site/cycle (and multi-cycle days) to one value
+    // per site/day and never drops a site that has only per-view rows — the
+    // isFused=true filter used to discard ~96% of the data (29 fused vs 792
+    // per-view). Fused preferred, nadir fallback.
     const dailyP = prisma.$queryRaw<DailyRow[]>`
-      WITH fused AS (
+      WITH rep AS (
         SELECT DISTINCT ON (date_trunc('day', "capturedAt"), "siteId")
           date_trunc('day', "capturedAt") AS day,
           "plantPresent" AS plant_present,
@@ -98,8 +106,9 @@ export async function GET(
           "heightMmMax"     AS h_max,
           "coverage"        AS cov
         FROM "SiteObservation"
-        WHERE "zoneId" = ${zoneId} AND "isFused" = true AND "capturedAt" >= ${since}
-        ORDER BY date_trunc('day', "capturedAt"), "siteId", "capturedAt" DESC
+        WHERE "zoneId" = ${zoneId} AND "capturedAt" >= ${since}
+        ORDER BY date_trunc('day', "capturedAt"), "siteId",
+                 "isFused" DESC, abs("viewAngleDeg") ASC NULLS FIRST, "capturedAt" DESC
       )
       SELECT
         day,
@@ -109,7 +118,7 @@ export async function GET(
         (percentile_cont(0.5) WITHIN GROUP (ORDER BY h_mean) FILTER (WHERE plant_present))::float AS height_mean_median_mm,
         (MAX(h_max) FILTER (WHERE plant_present))::float AS height_max_mm,
         (AVG(cov) FILTER (WHERE plant_present))::float AS coverage_mean
-      FROM fused
+      FROM rep
       GROUP BY day
       ORDER BY day ASC
     `;
@@ -133,7 +142,8 @@ export async function GET(
       ORDER BY day ASC
     `;
 
-    // Per-site daily series (fused, one row per site/day) for drill-down.
+    // Per-site daily series (one representative row per site/day) for drill-
+    // down — same fused-preferred / nadir-fallback selection as the rollup.
     const sitesP = prisma.$queryRaw<SiteRow[]>`
       SELECT DISTINCT ON (date_trunc('day', "capturedAt"), "siteId")
         "siteId" AS site_id,
@@ -144,8 +154,9 @@ export async function GET(
         "coverage"::float        AS cov,
         "plantPresent"           AS plant_present
       FROM "SiteObservation"
-      WHERE "zoneId" = ${zoneId} AND "isFused" = true AND "capturedAt" >= ${since}
-      ORDER BY date_trunc('day', "capturedAt"), "siteId", "capturedAt" DESC
+      WHERE "zoneId" = ${zoneId} AND "capturedAt" >= ${since}
+      ORDER BY date_trunc('day', "capturedAt"), "siteId",
+               "isFused" DESC, abs("viewAngleDeg") ASC NULLS FIRST, "capturedAt" DESC
     `;
 
     const [dailyRows, nadirRows, siteRows] = await Promise.all([
