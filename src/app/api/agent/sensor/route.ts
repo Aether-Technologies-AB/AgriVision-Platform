@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-key";
+import { getActiveBatchId } from "@/lib/active-batch";
 
 export async function POST(request: NextRequest) {
   const { error, apiKey } = await validateApiKey(request);
@@ -40,10 +41,20 @@ export async function POST(request: NextRequest) {
       !zone.agentLastSeen ||
       Date.now() - new Date(zone.agentLastSeen).getTime() > 3600_000;
 
+    // Best-effort batch stamping — losing the association is acceptable,
+    // losing the reading is not.
+    let batchId: string | null = null;
+    try {
+      batchId = await getActiveBatchId(zoneId);
+    } catch (err) {
+      console.error("getActiveBatchId failed, writing reading unstamped:", err);
+    }
+
     const writes: Promise<unknown>[] = [
       prisma.sensorReading.create({
         data: {
           zoneId,
+          batchId,
           temperature: temperature ?? null,
           humidity: humidity ?? null,
           co2: co2 ?? null,

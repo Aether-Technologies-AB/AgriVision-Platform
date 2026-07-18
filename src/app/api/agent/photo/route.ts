@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-key";
 import { put } from "@vercel/blob";
 import { enforcePhotoRetention } from "@/lib/photo-retention";
+import { getActiveBatchId } from "@/lib/active-batch";
 
 // File types we accept for Blob upload
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -42,6 +43,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Best-effort batch stamping — losing the association is acceptable,
+    // losing the photo is not.
+    let batchId: string | null = null;
+    try {
+      batchId = await getActiveBatchId(zoneId);
+    } catch (err) {
+      console.error("getActiveBatchId failed, writing photo unstamped:", err);
+    }
+
     // Check if Vercel Blob is configured
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       // Store photo record without blob URL — just record that a photo was taken
@@ -53,6 +63,7 @@ export async function POST(request: NextRequest) {
       const photo = await prisma.photo.create({
         data: {
           zoneId,
+          batchId,
           rgbUrl: `local://${rgbFile.name || "photo.jpg"}`,
           depthUrl: depthFile ? `local://${depthFile.name || "depth"}` : null,
           analysis,
@@ -125,6 +136,7 @@ export async function POST(request: NextRequest) {
     const photo = await prisma.photo.create({
       data: {
         zoneId,
+        batchId,
         rgbUrl,
         depthUrl,
         analysis,

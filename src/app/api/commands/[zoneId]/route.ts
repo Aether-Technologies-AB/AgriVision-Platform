@@ -40,6 +40,7 @@ export async function POST(
         zoneId,
         command,
         payload: payload ?? null,
+        source: "MANUAL",
       },
     });
 
