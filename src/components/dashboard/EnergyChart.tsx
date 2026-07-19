@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { energyDeviceColor } from "@/lib/energy-colors";
 
 interface EnergyData {
   totalKwh: number;
@@ -18,15 +19,6 @@ interface EnergyData {
   byDevice: { device: string; kWh: number; costKr: number }[];
   chart: Record<string, unknown>[];
 }
-
-const DEVICE_COLORS: Record<string, string> = {
-  humidifier: "#3b82f6",
-  fan: "#22c55e",
-  light: "#eab308",
-  "Main Humidifier": "#3b82f6",
-  "Exhaust Fan": "#22c55e",
-  "Grow Light": "#eab308",
-};
 
 export default function EnergyChart({ zoneId }: { zoneId: string }) {
   const [data, setData] = useState<EnergyData | null>(null);
@@ -105,7 +97,7 @@ export default function EnergyChart({ zoneId }: { zoneId: string }) {
               key={device}
               dataKey={device}
               stackId="energy"
-              fill={DEVICE_COLORS[device] || "#6b7280"}
+              fill={energyDeviceColor(device)}
               radius={[2, 2, 0, 0]}
             />
           ))}
