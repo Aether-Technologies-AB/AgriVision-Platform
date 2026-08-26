@@ -272,6 +272,16 @@ model SensorReading {
   ec        Float? // water electrical conductivity in µS/cm (EZO-EC native unit)
   waterTemp Float? // water/reservoir temperature in °C — distinct from `temperature` (= AIR temp)
 
+  // Refill-reservoir level (ultrasonic sensor, pi4-003 GGS Climate zone).
+  // The MAIN reservoir is held at a constant level by a float valve; the
+  // sensor sits in the REFILL tank that tops it up, so this volume falls
+  // monotonically as the crop draws water and jumps up only on a manual
+  // refill. The downward slope over time IS the transpiration / uptake rate;
+  // consumption is derived from the delta, not stored per-row. Both nullable —
+  // only zones with the ultrasonic reservoir sensor populate them.
+  waterLevelL  Float? // calibrated refill-reservoir volume in litres (piecewise-linear from mm)
+  waterLevelMm Float? // raw ultrasonic surface reading in mm (kept so history can be re-calibrated)
+
   timestamp DateTime @default(now())
 
   @@index([zoneId, timestamp])

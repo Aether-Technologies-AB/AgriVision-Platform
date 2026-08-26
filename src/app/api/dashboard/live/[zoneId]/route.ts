@@ -159,6 +159,8 @@ export async function GET(
             ph: sensor.ph,
             ec: sensor.ec,
             waterTemp: sensor.waterTemp,
+            waterLevelL: sensor.waterLevelL,
+            waterLevelMm: sensor.waterLevelMm,
             timestamp: sensor.timestamp,
           }
         : null,
@@ -171,6 +173,8 @@ export async function GET(
             ph: sensorOneHourAgo.ph,
             ec: sensorOneHourAgo.ec,
             waterTemp: sensorOneHourAgo.waterTemp,
+            waterLevelL: sensorOneHourAgo.waterLevelL,
+            waterLevelMm: sensorOneHourAgo.waterLevelMm,
           }
         : null,
       // Data-driven gate: true only when the latest reading carries water
@@ -181,6 +185,14 @@ export async function GET(
         (sensor.ph !== null ||
           sensor.ec !== null ||
           sensor.waterTemp !== null)
+      ),
+      // Independent gate for the refill-reservoir sensor (ultrasonic). Kept
+      // separate from hasWater because a zone can have the reservoir sensor
+      // without EZO chemistry probes (and vice-versa) — the GGS Climate zone
+      // may report level only. Non-sensor zones leave both NULL → false.
+      hasReservoir: !!(
+        sensor &&
+        (sensor.waterLevelL !== null || sensor.waterLevelMm !== null)
       ),
       devices: devices.map((d: any) => ({
         id: d.id,

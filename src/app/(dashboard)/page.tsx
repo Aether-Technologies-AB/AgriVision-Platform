@@ -21,6 +21,7 @@ import {
 import SensorCard from "@/components/dashboard/SensorCard";
 import EnvironmentChart from "@/components/dashboard/EnvironmentChart";
 import WaterChart from "@/components/dashboard/WaterChart";
+import ReservoirChart from "@/components/dashboard/ReservoirChart";
 import ActiveBatchCard from "@/components/dashboard/ActiveBatchCard";
 import CameraFeed from "@/components/dashboard/CameraFeed";
 import AIDecisionFeed from "@/components/dashboard/AIDecisionFeed";
@@ -76,6 +77,8 @@ interface LiveData {
     ph: number | null;
     ec: number | null;
     waterTemp: number | null;
+    waterLevelL: number | null;
+    waterLevelMm: number | null;
     timestamp: string;
   } | null;
   sensorPrev: {
@@ -86,8 +89,11 @@ interface LiveData {
     ph: number | null;
     ec: number | null;
     waterTemp: number | null;
+    waterLevelL: number | null;
+    waterLevelMm: number | null;
   } | null;
   hasWater: boolean;
+  hasReservoir: boolean;
   devices: {
     id: string;
     type: string;
@@ -494,12 +500,30 @@ export default function DashboardPage() {
                   />
                 </>
               )}
+
+              {/* Refill-reservoir level card — own gate (hasReservoir), so it
+                  shows on the GGS Climate zone whether or not that zone also has
+                  EZO chemistry. No range/warn colors: any level is "fine", the
+                  chart below carries the consumption story. */}
+              {live?.hasReservoir && (
+                <SensorCard
+                  label="Reservoir"
+                  value={live?.sensor?.waterLevelL ?? null}
+                  prevValue={live?.sensorPrev?.waterLevelL ?? null}
+                  unit="L"
+                  icon={<Droplet className="h-4 w-4" />}
+                  decimals={1}
+                />
+              )}
             </div>
 
             <EnvironmentChart zoneId={selectedZoneId} />
             {/* Water Chemistry chart — same hasWater gate as the water cards,
                 so non-water zones (Urban Seeds, Mushu, …) never render it. */}
             {live?.hasWater && <WaterChart zoneId={selectedZoneId} />}
+            {/* Refill-reservoir level + transpiration draw — own hasReservoir
+                gate, independent of the chemistry chart above. */}
+            {live?.hasReservoir && <ReservoirChart zoneId={selectedZoneId} />}
             <EnergyChart zoneId={selectedZoneId} />
             <ActiveBatchCard batch={live?.activeBatch ?? null} />
             {/* Camera-rail trait rollup — only on rail-configured floor zones

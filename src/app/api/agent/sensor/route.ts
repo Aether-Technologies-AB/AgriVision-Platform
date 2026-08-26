@@ -9,15 +9,34 @@ export async function POST(request: NextRequest) {
   if (error) return error;
 
   try {
-    const { zoneId, temperature, humidity, co2, vpd, battery, ph, ec, waterTemp } =
-      await request.json();
+    const {
+      zoneId,
+      temperature,
+      humidity,
+      co2,
+      vpd,
+      battery,
+      ph,
+      ec,
+      waterTemp,
+      waterLevelL,
+      waterLevelMm,
+    } = await request.json();
 
     // temperature/humidity are optional: a dedicated water/CO2 agent pushes
     // ph/ec/waterTemp/co2 without touching the air readings the GGS agent owns.
     // Require zoneId + at least one sensor value so we never store an empty row.
-    const hasAnyMetric = [temperature, humidity, co2, vpd, ph, ec, waterTemp].some(
-      (v) => v !== undefined && v !== null
-    );
+    const hasAnyMetric = [
+      temperature,
+      humidity,
+      co2,
+      vpd,
+      ph,
+      ec,
+      waterTemp,
+      waterLevelL,
+      waterLevelMm,
+    ].some((v) => v !== undefined && v !== null);
     if (!zoneId || !hasAnyMetric) {
       return NextResponse.json(
         { error: "zoneId and at least one sensor value are required" },
@@ -63,6 +82,10 @@ export async function POST(request: NextRequest) {
           ph: ph ?? null,
           ec: ec ?? null,
           waterTemp: waterTemp ?? null,
+          // Refill-reservoir level (ultrasonic sensor) — optional; only the
+          // GGS Climate zone sends these. Absent keys persist as NULL.
+          waterLevelL: waterLevelL ?? null,
+          waterLevelMm: waterLevelMm ?? null,
         },
       }),
     ];

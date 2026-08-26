@@ -62,6 +62,8 @@ export async function GET(
         ph: true,
         ec: true,
         waterTemp: true,
+        waterLevelL: true,
+        waterLevelMm: true,
       },
       orderBy: { timestamp: "asc" },
     });
