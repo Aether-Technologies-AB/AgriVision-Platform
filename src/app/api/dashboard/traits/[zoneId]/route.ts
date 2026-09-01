@@ -125,6 +125,16 @@ export async function GET(
 
     // Bonus (cheap): nadir volume = the non-fused row with the smallest
     // |viewAngleDeg| per site/day, median across sites. Merged into `days`.
+    // plantPresent DESC sits between the angle and capturedAt deliberately.
+    // Unlike the rollup above there is no isFused tiebreak here (fused rows are
+    // excluded), so the same view of a site ties on |viewAngleDeg| across every
+    // cycle of the day and the LAST cycle wins on capturedAt alone. A rejected
+    // cycle -- e.g. a scan that ran after lights-off, all sites no_green with
+    // null traits -- would then become the representative row for every site,
+    // and the plant_present filter below would drop them all, nulling the whole
+    // day's median. Keeping angle as the primary sort preserves "nadir"; the
+    // plantPresent tiebreak only chooses among rows already at the same angle,
+    // so one bad cycle can no longer erase the series.
     const nadirP = prisma.$queryRaw<NadirRow[]>`
       WITH nadir AS (
         SELECT DISTINCT ON (date_trunc('day', "capturedAt"), "siteId")
@@ -134,7 +144,8 @@ export async function GET(
         FROM "SiteObservation"
         WHERE "zoneId" = ${zoneId} AND "isFused" = false
           AND "viewAngleDeg" IS NOT NULL AND "capturedAt" >= ${since}
-        ORDER BY date_trunc('day', "capturedAt"), "siteId", abs("viewAngleDeg") ASC, "capturedAt" DESC
+        ORDER BY date_trunc('day', "capturedAt"), "siteId",
+                 abs("viewAngleDeg") ASC, "plantPresent" DESC, "capturedAt" DESC
       )
       SELECT day, (percentile_cont(0.5) WITHIN GROUP (ORDER BY vol) FILTER (WHERE plant_present))::float AS vol_nadir_median
       FROM nadir
