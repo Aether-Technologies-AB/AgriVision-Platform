@@ -547,9 +547,11 @@ model MLModel {
 // ─── Lettuce/basil trait ingestion (Pilot Basement pilot) ───
 //
 // One row per (rail, cycleId, siteId, viewAngleDeg) trait record produced by
-// an off-platform GPU box running detection locally on RGB-D camera-rail
-// scans. Images stay on the GPU box; only traits + a few representative
-// photos travel. A "site" is a physical net-pot (e.g. "row06_ch2"), imaged
+// the rail's own Pi (pi4-004 = rail1, pi4-005 = rail2) running detection
+// locally on RGB-D camera-rail scans. Images stay on the Pi; only traits + a
+// few representative photos travel. (Older comments said "off-platform GPU
+// box" — stale; pop-os holds an older copy and runs nothing. Verified
+// 2026-09-02.) A "site" is a physical net-pot (e.g. "row06_ch2"), imaged
 // from 3 rail stops per cycle (~-18/0/+18deg off-nadir) plus one FUSED
 // record merging those views into a 3D reconstruction — up to 4 rows per
 // site per cycle. Traits are recorded even for an empty/rejected pot so
