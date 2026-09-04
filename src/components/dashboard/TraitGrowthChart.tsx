@@ -74,7 +74,7 @@ export default function TraitGrowthChart({ zoneId }: { zoneId: string }) {
 
   const { data, isLoading } = usePolling<TraitData>({
     url: `/api/dashboard/traits/${zoneId}?range=${range}`,
-    intervalMs: 60_000, // same cadence as EnvironmentChart
+    intervalMs: 300_000, // same cadence as EnvironmentChart
   });
 
   const days = data?.days ?? [];
