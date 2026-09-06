@@ -61,6 +61,7 @@ Two autonomous motorized camera rails for plant monitoring. Each rail: a **PD St
 - Router: Huawei 192.168.1.1 (admin / **[password redacted]**), SSID `Tele2Internet-b9b01` / **[PSK redacted]**. DHCP bindings set for both boards + all Pis (pi4-003 = .9). **Note: changing DHCP settings restarts the router's DHCP — devices may need a power cycle to re-lease.**
 - Power: each board on a **12V PD charger** (Power Good ~11.9 V) for motor operation. Pi USB = flashing/serial only (Power Bad — homing safely refuses). Single USB-C: flash XOR run.
 - Pi WiFi: power-save **disabled permanently** on pi4-004 via `/etc/NetworkManager/conf.d/wifi-powersave.conf` (`[connection]` / `wifi.powersave = 2`). ⚠️ **Still pending on pi4-005** (was `Power Management:on` — same drop risk).
+  > ⚠ **2026-09-06: DONE on pi4-005 too** — the conf file exists there. Verified.
 
 ## Firmware (identical on both boards, hostname differs)
 Source of truth on **pi4-004 only**: `~/PD-Stepper/Software/PD_Stepper_Web_Server/` (rail #1) and `..._005/` (rail #2). Both boards are flashed from pi4-004's USB. Toolchain: `export PATH=$PATH:~/bin`, then:
@@ -87,7 +88,7 @@ arduino-cli upload -p /dev/ttyACM0 --fqbn esp32:esp32:esp32s3:CDCOnBoot=cdc .
 ## Scan system (Behavior 2 — the agent's command)
 **`~/scan_cycle.py` on each Pi** (same file; per-Pi config at top: `BOARD`, `CAPTURE_CMD` path):
 
-- Flow: check `/powergood` → `ensure_settings()` → **re-home** (fresh zero every cycle; waits for park) → sweep far→home: stops `[−141846, −115282, −86717, −58153, −29588, −1024]` (stop 1 ≈ 3 cm from far end, ~28.5 cm spacing, last 1 cm from switch) → at each stop: verified `moveTo` (posts, confirms target registered, retries ×3 — fixes a firmware quirk where the first post-homing moveTo is silently dropped) → wait `moving=no` → 1.5 s settle → run `CAPTURE_CMD` → finally park at −72435.
+- Flow: check `/powergood` → `ensure_settings()` → **re-home** (fresh zero every cycle; waits for park) → sweep far→home: stops `[−141846, −115282, −86717, −58153, −29588, −1024]` (stop 1 ≈ 3 cm from far end, ~28.5 cm spacing, last 1 cm from switch) **[2026-09-06: SUPERSEDED — 11 stops at 13.08 cm, one per hole row; see `rails/rail1.json`, whose anchors were MEASURED and differ per rail]** → at each stop: verified `moveTo` (posts, confirms target registered, retries ×3 — fixes a firmware quirk where the first post-homing moveTo is silently dropped) → wait `moving=no` → 1.5 s settle → run `CAPTURE_CMD` → finally park at −72435.
 - `CAPTURE_CMD = python3 /home/<pi>/test_realsense.py --label "scan_stop${RAIL_STOP_INDEX}_pos${RAIL_POS}"` — blocking; non-zero capture exit aborts the cycle.
 - Camera script `~/test_realsense.py` (each Pi): 1280×720, 30-frame AE warm-up, saves rgb.jpg + depth.npy + depth_vis.jpg + comparison.jpg to `~/agrivision/realsense_tests/`, exits 0. ~6.5 MB × 4 files per stop → **~26 MB per cycle**.
 - Modes: `--dry` (motion only), `--status` (health print), default = full scan.
@@ -104,6 +105,11 @@ optional pre-checks: GET http://<board>/powergood , /homed
 
 Cycles are idempotent and safe to re-run. NO cron installed (removed by decision — the agent is the sole trigger). Boards may be power-cycled at any time; they self-home and re-park.
 
+> ⚠ **2026-09-06: SUPERSEDED.** A cron DOES run the pipeline — `0 7,11,15,19`
+> on pi4-004, `5 6,10,14,18` on pi4-005, deliberately inside the lit window.
+> It calls `run_pipeline.py`, which orchestrates capture → `measure_cycle` →
+> `merge_views` → `push_traits`, not `scan_cycle.py` directly.
+
 ## Engineering record (do not relitigate)
 1. **Sensorless StallGuard homing: proven non-viable** on these rails — contact-tested both ends × speeds 2500–25000 µs × currents 45/70% × two belt tensions via a custom /seektest; free-running and at-end SG overlap everywhere (belt slips before motor stalls). Physics, not tuning. Microswitch chosen; worked first try.
 2. **GPIO map trap:** schematic net "PIU2018" = package pin 18 = **GPIO14** (AUX1), "PIU2017" = **GPIO13** (AUX2). GPIO17/18 are the TMC UART — configuring them as inputs breaks boot (server never starts; ping works, port 80 refused).
@@ -112,9 +118,13 @@ Cycles are idempotent and safe to re-run. NO cron installed (removed by decision
 5. First-moveTo-after-homing drop + stale `/homed` yes: both fixed (endpoint clears state; script verifies+retries).
 
 ## Open items (for the agent phase)
-1. **pi4-005 WiFi power-save OFF** (one command, listed above) — do before unattended operation.
-2. **Storage retention** — undecided. Proposal: per-Pi cron `find ... -name "*.npy" -mtime +14 -delete; ... "*.jpg" -mtime +90 -delete` (03:30 daily). Without it, ~26 MB/cycle accumulates.
-3. **Depth glare** — both cameras report only **54–77% valid pixels** consistently ("suggests glare"; bare D435 ≈ 95–99%). Review comparison JPGs against real plants; likely a lighting/enclosure fix before long-term data collection.
+
+> ⚠ **2026-09-06: items 1–3 are DONE.** Annotated inline below. Only item 4
+> (cosmetic) may still stand.
+
+1. ~~**pi4-005 WiFi power-save OFF**~~ **DONE** (2026-09-06 verified: the conf file exists on pi4-005).
+2. ~~**Storage retention** — undecided.~~ **DECIDED (2026-09-06): depth is NEVER pruned.** `run_pipeline.py` accepts `--prune-days` but ignores it, and defaults to 0. Do not add the proposed cron — depth `.npy` is the calibration archive, and pruning is how `scan01` lost its. Actual footprint is ~14.4 MB/cycle, ~50 MB/day; disk is 43% used, ~20 months of headroom.
+3. ~~**Depth glare** — only 54–77% valid pixels.~~ **SOLVED.** Cardboard diffuser + 848×480 capture + net-pot cups. Measured 2026-09-06 over all present records since 09-01: **91.8% mean on rail1, 91.7% on rail2**. Watch for *progressive* decline (humidity killed a D405 in three weeks in Kim et al. 2024); ours is fluctuating, not collapsing.
 4. Cosmetic: scan_cycle.py comment says "rail #1" on rail #2; test_realsense.py's final scp hint has a stale hostname.
 
 ## Operational gotchas
