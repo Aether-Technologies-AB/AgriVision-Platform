@@ -59,7 +59,9 @@ window a yield calibration would be fitted on.
 | `plane_ref_rail1.json` | 44 frozen `(stop, channel)` planes with per-cell tilt |
 | `measure_cycle.site_plane_mm` | per-site plane, evaluated at the blob centroid |
 | `measure_cycle.verify_planes` | per-cycle drift check |
-| `run_pipeline --plane-ref` | forwards the reference; **refuses to start** if configured but missing |
+| `run_pipeline --plane-ref` | forwards the reference to BOTH stages; **refuses to start** if configured but missing |
+| `plane_ref.py` | leaf module both stages import, so they cannot disagree |
+| `merge_views` | per-site reference plane instead of one cycle median |
 | `rails/rail1.json` `plane_ref` | the switch. rail2 has no such key |
 | `config.py` `plane_ref_path` | resolves it, same pattern as `site_map_path` |
 
@@ -128,11 +130,23 @@ carried `schema 3` with pooled geometry; it was recomputed and re-pushed, and
 the ingest upserted it in place (132 records, not 264 — the `NULLS NOT
 DISTINCT` idempotency guard doing its job).
 
-**Fused records are still schema 2 and still pooled.** `merge_views` computes
-its own plane as `np.median(planes)` across the cycle and does not read the
-reference. This is survivable *only* because the dashboard rollup is now
-nadir-only — the two changes hold each other up. Do not revert one without
-the other.
+**Fused records now use the reference too** (as of `3afedb1`). `merge_views`
+previously computed `np.median(planes)` across the *entire cycle* — one scalar
+for every site at every stop, which was worse than measure_cycle's per-frame
+scalar. A site's fused height and its nadir height were measured against
+different surfaces by construction. Each fused site now uses the cell belonging
+to its own row, and nadir and fused planes agree for **34 of 34** sites.
+
+    2026-09-06_15-01-10, fused      old      new
+    distinct channel_plane_mm         1       25
+    schema                            2        3
+    volume ratio new/old                   median 0.585
+    records                          36       34
+
+The two dropped are `row00_ch2` and `row00_ch3` — sites past the rail end that
+appear only in oblique views, have no cell of their own, and are refused rather
+than given a borrowed plane. That leaves 34 fused records against
+`plantCount = 34`.
 
 ---
 
@@ -200,9 +214,24 @@ would have reported 0.34 mm and looked like the most confident cell in the set.
 
 ---
 
+## 7a. One rule that kept producing bugs
+
+Three separate defects had the same shape: **deriving a site's identity from
+what was detected rather than from the site map.**
+
+1. `merge_views` recorded a site's primary stop inside the detection loop, so
+   `row11_ch4` — whose nadir view failed the colour gate — silently lost its
+   reference cell.
+2. `measure_cycle` resolved a plane only inside the detected-blob path, so 19
+   of 132 records fell back to the pooled scalar.
+3. The dashboard rollup preferred any fused row over nadir, so 1-view "fusions"
+   of sites that are not in the nadir map at all inflated the plant count.
+
+Which cell a site belongs to, and which stop it belongs to, are properties of
+the map. They must never depend on whether the plant happened to be visible.
+
 ## 8. Still open
 
-- **`merge_views` does not read the reference.** Highest-value next step.
 - **rail2 has no reference.** It can be built from archive data — contrary to
   the TODO, rail2 *does* have lit+empty frames: `2026-08-18_14`,
   `2026-08-19_12` (an off-schedule manual run) and `2026-08-21_14`, all at
