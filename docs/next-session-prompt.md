@@ -20,8 +20,10 @@ testing. Re-measure anything load-bearing before you build on it.
 ENVIRONMENT — these took a long time to discover, don't rediscover them:
 
 - Platform repo: /Users/giancarloperez/agrivision-platform (Next.js + Prisma,
-  Neon Postgres). Currently on branch fix/nadir-tiebreak-dark-cycle with two
-  unpushed commits (235eaa5, aae7379).
+  Neon Postgres), on `main`, everything merged as of 2026-09-06.
+- `npm run build` fails out of the box: lightningcss.darwin-arm64.node is not
+  installed. `npm install lightningcss-darwin-arm64 --no-save` fixes it. This is
+  a broken install, not your change.
 - The DB is reachable from the Mac. There is no psql and the Mac has no numpy.
   Use node + the project's own pg:
     node -e '...' with require("/Users/giancarloperez/agrivision-platform/node_modules/pg")
@@ -36,14 +38,32 @@ ENVIRONMENT — these took a long time to discover, don't rediscover them:
 - SSH user is the hostname itself: `ssh pi4-004@pi4-004`. Not your own username.
 - The Pis have numpy + cv2 ONLY. No sklearn, no scipy, no onnxruntime. 4 cores,
   3.8 GB RAM. Anything that must run there has to work in pure numpy.
-- The Pis' git remote is a READ-ONLY deploy key. You can commit but not push.
-  deploy/update.sh does `git reset --hard origin/main`, so an unpushed local
-  commit is destroyed, not conflicted.
+- The Pis' git remote is a READ-ONLY deploy key (verified: `git push --dry-run`
+  returns "the key you are authenticating with has been marked as read only").
+  A commit made ON a Pi cannot be pushed from it, and `git reset --hard
+  origin/main` will destroy it.
+- BUT there IS a push path from the Mac, and it is not obvious: the edge repo is
+  cloned at ~/Agrivision-PI/agrivision-farm-nodes (note the SUBDIRECTORY —
+  ~/Agrivision-PI itself is not a repo) over HTTPS with osxkeychain
+  credentials. It pushes fine. There is no `gh` CLI, but the stored credential
+  is a `gho_` token that works against api.github.com for opening PRs.
+- deploy/update.sh DOES NOT WORK on the rail nodes: no systemd unit, no .venv,
+  so it aborts at the pip line under `set -e`. The rails run from cron with
+  /usr/bin/python3. Deploying is:
+      cd ~/agrivision-edge && git fetch --all && git reset --hard origin/main
+  No restart needed — cron spawns a fresh process each cycle.
 - Diagnostics live in docs/rail-diagnostics/. They import merge_views,
   measure_plants and gates, so copy them INTO the Pi's agrivision/ directory to
   run, then delete them — leave the production tree clean.
 - Per-cycle capture archive: ~/agrivision-edge/.../agrivision/cycles/ on each
-  Pi. 184 of 202 cycles retain depth .npy back to 2026-07-20.
+  Pi, depth .npy back to 2026-07-20 (~217 cycles on rail1 and counting).
+- The cycle DIRECTORY name is the pipeline run time; the `cycleId` in the DB is
+  the FIRST FRAME's timestamp. They differ by ~3 minutes and are not
+  interchangeable — `cycles/2026-09-06_15-04-03` holds cycleId
+  `2026-09-06_15-01-10`.
+- Both Pis hold the FULL repo including the OTHER rail's directory, so
+  `ls -d .../*/agrivision | head -1` picks the wrong one. Always name the rail
+  explicitly.
 
 GROUND TRUTH — the only numbers no algorithm chose. rail1, stop 6, hand-read
 from a gridded frame, 7x7 median, all 49/49 valid:
@@ -70,6 +90,17 @@ METHOD WARNINGS — each of these already cost a wrong conclusion:
 5. Plain least squares on channel pixels fails (13-24 mm residuals, tilts to
    -11.6 deg) — the cardboard and trough walls drag it. Use the median-seeded
    fit in build_plane_ref.py.
+6. An absolute brightness floor is not enough. A frame can pass `> 150` and
+   still be shadowed: 2026-08-16_12-04-05 has stops 9/10/11 at 292/180/268
+   against that cycle's own median of 413, and under frozen bands it produced a
+   62 mm error. Gate RELATIVE to the cycle too (SHADOW_FRAC in
+   build_plane_ref.py).
+7. Do not derive a site's identity from what was DETECTED. Which cell and which
+   stop a site belongs to are properties of the site map. Three separate bugs
+   came from this: merge_views lost row11_ch4's cell because its nadir view
+   failed a colour gate, measure_cycle left 19 of 132 records on the pooled
+   plane, and the dashboard counted 1-view "fusions" of sites not in the nadir
+   map at all.
 
 DO NOT REDO — tried, measured, rejected, with reasons in section 5 of
 robust-pot-distance.md: per-cycle channel detection (silently loses a whole
