@@ -9,7 +9,10 @@ The goal of this work is one trustworthy reference distance for **every pot**,
 holding in any condition, with failures that announce themselves.
 
 Investigated 2026-09-02 against live rail1/rail2 data and the on-Pi producer
-source. Nothing here is in production yet.
+source. **The fix described here shipped to rail1 on 2026-09-06** — see
+[`rail-plane-deployment-2026-09-06.md`](rail-plane-deployment-2026-09-06.md).
+Sections 1-6 describe the problem as it stood before that, and are kept as the
+reasoning; §7 tracks what is and is not done. rail2 is still unchanged.
 
 Companions: [`observations-pipeline-changelog.md`](observations-pipeline-changelog.md)
 · [`rail-fusion-registration-fix.md`](rail-fusion-registration-fix.md)
@@ -301,18 +304,49 @@ dark by 08-24; hour 16 was lit on 08-10, dark on 08-16, lit again on 08-24.
 
 ## 7. What remains
 
-1. **Step 2** — read the frozen reference at runtime, verify against a dilated
-   plant mask, flag drift beyond ~5 mm, and record which source each record used.
-2. **Mark degenerate cells** unusable in the reference (ch4/stop 1 today).
-3. **Calibrate rail2**, and repeat the 16-point hand read there before trusting it.
-4. **`merge_views`** — use the reference per view instead of `np.median(planes)`
-   across the cycle.
-5. **Re-check the 8 mm height gate** once planes come from the reference; it was
-   set against heights biased high by 2–27 mm depending on channel and rail.
-6. **Re-run the empty-rig regression** (§5.15). rail2/ch1's phantom 27 mm
-   protrusion should vanish.
-7. **Confirm the net-pot diameter** — still the one number that closes the
-   separate 8–15% metric-scale question (see the fix spec).
+**Shipped 2026-09-06** — see
+[`rail-plane-deployment-2026-09-06.md`](rail-plane-deployment-2026-09-06.md)
+for the deployment record and the numbers.
+
+1. ~~**Step 2** — read the frozen reference at runtime~~ **DONE.** Live on
+   rail1. Per-site plane from the reference; a per-cycle drift check that
+   verifies against a plant mask dilated 5x with a 9x9 kernel and judges the
+   *cycle* rather than the cell. Validated both ways: quiet on true references
+   (−0.31 mm empty, +0.18 planted), fires on a simulated 8 mm move (−7.80).
+2. ~~**Mark degenerate cells** unusable~~ **DONE.** Cell `1|4`, and the policy
+   now lives in `build_plane_ref.py` (`UNUSABLE_CELLS`) so a rebuild re-applies
+   it. Annotating the JSON by hand did not survive one.
+3. **Calibrate rail2** — still open, but **easier than this document claims.**
+   §6 says the only lit-empty frames in the archive are rail1's. rail2 has
+   three of its own: `2026-08-18_14`, `2026-08-19_12` (an off-schedule manual
+   run) and `2026-08-21_14`, brightness 342–381 with the floor empty. The
+   16-point hand read there is still required before its tilt is trusted — and
+   until it is, `TILT_VALIDATED_RAILS` gives rail2 flat planes by default.
+4. ~~**`merge_views`** — use the reference instead of `np.median(planes)`~~
+   **DONE.** It was worse than described: one scalar for the *entire cycle*,
+   applied to every site at every stop. Nadir and fused planes now agree for
+   34 of 34 sites; previously a pot's two heights were measured against
+   different surfaces by construction.
+5. **Re-check the 8 mm height gate** — measured, not yet re-tuned. Applying the
+   reference drops 5 of 664 present records (0.8%) below the gate on rail1, so
+   detection is essentially unaffected and no change is urgent.
+6. **Re-run the empty-rig regression** (§5.15) — still open, and still blocked:
+   `scan01` has 0 `.npy`. The August empty-floor cycles supersede it.
+7. **Confirm the net-pot diameter** — still open, still the one external length
+   that closes the 8–15% metric-scale question. Note the audit could not
+   reproduce the 0.909 ratio by any of three depth choices; using the hand-read
+   channel surface it comes out at 49.3 mm mean, i.e. ~0.985 against a 50 mm
+   spec. Worth re-deriving before acting on the 8–15% figure.
+
+Newly open, from the deployment:
+
+8. **Stops 9–11 have never been hand-read.** They carry the largest tilts. The
+   16 ground-truth points cover stop 6 only, and within it only y 150–350 of a
+   480 px frame.
+9. **`clippedByRoi` is at 78% and is on no dashboard.** It is the direct
+   measure of whether `areaCm2` is measuring a plant or an ROI.
+10. **`areaCm2` has no depth-validity gate.** Area scales as depth²; one rail2
+    record read 4742 cm² off 12% valid depth.
 
 ---
 

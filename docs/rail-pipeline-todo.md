@@ -1,5 +1,10 @@
 # Camera-rail pipeline — TODO
 
+> **Updated 2026-09-06.** The plane work shipped to rail1; see
+> [`rail-plane-deployment-2026-09-06.md`](rail-plane-deployment-2026-09-06.md).
+> Items below are marked done where they are done, and corrected where
+> measurement contradicted them. rail2 is deliberately unchanged.
+
 Consolidated from the 2026-09-02 investigation of Floor 1 lettuce model output.
 Evidence for every claim is in
 [`observations-pipeline-changelog.md`](observations-pipeline-changelog.md) and
@@ -195,7 +200,12 @@ silently.
   trusting anything there; its channels sit at very different distances
   (380-410 vs rail1's 393-407).
 
-- [ ] **STEP 2 — use the reference at runtime.** Per cycle the pipeline reads
+- [x] **STEP 2 — use the reference at runtime.** DONE, live on rail1
+  2026-09-06 (`agrivision-edge` 3afedb1). Drift check validated in both
+  directions: quiet on true references (−0.31 mm empty, +0.18 planted), fires
+  on a simulated 8 mm move (−7.80). It judges the CYCLE, not the cell —
+  per-cell alarming would have fired on 3 of 43 cells purely from canopy.
+  Original text: Per cycle the pipeline reads
   `plane_ref_rail1.json` rather than re-deriving geometry from a
   canopy-occluded frame. It only has to *verify*: sample the channel pixels the
   reference predicts, check the median agrees within tolerance, and flag or
@@ -214,10 +224,20 @@ silently.
   (plant/cup) and is safe to bridge at any width; usable pixels at the wrong
   distance means known gap and must never be bridged.
 
-- [ ] **Repeat Step 1 for rail2** — opposite tilt, its own reference.
-- [ ] **`merge_views`: use the reference per view** instead of
-  `np.median(planes)` across the cycle.
-- [ ] **Re-check the 8 mm height gate** once planes come from the reference.
+- [ ] **Repeat Step 1 for rail2** — opposite tilt, its own reference. **Not
+  blocked on a new capture**, contrary to the note above: rail2 has three
+  lit+empty cycles in the archive (`2026-08-18_14`, `2026-08-19_12` — an
+  off-schedule manual run — and `2026-08-21_14`, brightness 342–381 with the
+  floor empty). The 16-point hand read is still required before its tilt is
+  trusted; until then `TILT_VALIDATED_RAILS` gives it flat planes.
+- [x] **`merge_views`: use the reference** — DONE 2026-09-06. It was worse than
+  written here: not "per view" but ONE scalar for the entire cycle, applied to
+  every site at every stop. Nadir and fused planes now agree for 34 of 34
+  sites. Fused volumes ×0.585 median; 36 → 34 records, the two dropped being
+  `row00_ch2`/`row00_ch3`, which have no nadir cell at all.
+- [x] **Re-check the 8 mm height gate** — MEASURED 2026-09-06: applying the
+  reference drops 5 of 664 present records (0.8%) below the gate on rail1.
+  Detection is essentially unaffected; no retune needed for now.
 - [ ] **Re-run the empty-rig regression** (section 5.15) afterwards.
 - [ ] **Fusion registration** (`y_scale` + tilt). Lowest priority: 7.6 says use
   nadir for lettuce anyway, so this is basil-only work.
@@ -241,17 +261,26 @@ silently.
 
 ## P3 — known, lower impact
 
-- [ ] **Make depth retention safe by default.** Right now the *only* thing
+- [x] **Make depth retention safe by default.** DONE — merged to `main`
+  2026-09-06 (`agrivision-edge` c93bbb7). `--prune-days` now defaults to 0 and
+  is ignored entirely. Until that merge it existed ONLY as an unpushed local
+  commit on each Pi, which `update.sh`'s `git reset --hard origin/main` would
+  have destroyed. Original text: Right now the *only* thing
   preserving depth is `--prune-days 0` in one cron line; `run_pipeline.py`'s
   own default is `14`. Anyone who runs the pipeline by hand, or any regeneration
   of that crontab entry, silently destroys depth older than two weeks — which is
   how `scan01` already lost its depth. Change the default to 0 (or drop the
   prune step) so the safe behaviour is the unconfigured one. Disk is not the
   constraint: 43% used, ~50 MB/day, ~20 months of headroom.
-- [ ] **Gate scanning on lights-on.** 76 of 167 rail1 cycles run at 00/04/20h
-  in darkness, detecting 0–1%. Nearly halves storage and compute for no loss.
-- [ ] **Add a ~4 cm³ volume floor.** 44 sites get ≥1 detection but only 34 are
-  planted; ~10 empty pots fire sporadically at 0.1–3.5 cm³.
+- [x] **Gate scanning on lights-on.** ALREADY TRUE as of 2026-09-01 — the cron
+  moved to 07/11/15/19 (rail1) and 06/10/14/18 (rail2), and **0 of 39 cycles
+  since then are unlit**. The "76 of 167" figure spans the empty-floor era and
+  no longer describes the rig.
+- [ ] ~~**Add a ~4 cm³ volume floor.**~~ **DO NOT BUILD AS SPECIFIED.** Re-measured
+  2026-09-05: only 37 sites ever fire, and exactly 34 since planting. The false
+  positives are **9 records across five weeks**, at 2.6/3.4/4.2/4.2/4.9/5.1/
+  5.5/5.5/8.8 cm³ — a 4 cm³ floor removes 2 of 9 and would have deleted three
+  days of real early growth (the batch averaged 4.6–6.2 cm³ on 08-25→27).
 - [ ] **Fix the ch1 ROI bounds**, or implement §5.11's per-channel calibration.
   ch1 is `clippedByRoi` 70.5% of views vs ~31% elsewhere, and detects in 22.3%
   vs ~65%. Cross-channel absolute comparison is confounded until then.
