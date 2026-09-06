@@ -91,6 +91,77 @@ def runs_from_state(st, min_run):
     return [r for r in runs if r[1] - r[0] >= min_run]
 
 
+# --------------------------------------------------------------------------- #
+# POLICY. These decisions belong HERE, not in the reference JSON, because a
+# rebuild writes a fresh dict per cell and would silently discard anything
+# annotated onto the artifact afterwards -- taking the correction with it and
+# leaving no trace. Every rebuild, for every future batch, re-applies these.
+# --------------------------------------------------------------------------- #
+
+TILT_VALIDATED_RAILS = {"rail1"}
+"""Rails whose fitted gradient has been checked against hand-read depth.
+
+The tilt is real where it has been tested: against the 16 hand-picked points at
+rail1 stop 6 -- a 2x2 grid per channel, which is the arrangement that actually
+tests a gradient -- the flat plane_mm scores abs-mean 1.69 mm and plane_mm +
+tilt scores 0.95. ch1's four points span 403-409 mm inside ONE channel at ONE
+stop, so this is not fit noise.
+
+But it is only real WHERE TESTED. A rail absent from this set still gets its
+per-(stop, channel) plane_mm -- which is the bulk of the win, roughly 12 mm of
+error down to ~1 -- and stores its gradient as a_fitted/b_fitted while using
+a = b = 0. Tilt is opt-in on evidence, per rail. rail2 in particular tilts the
+OPPOSITE way to rail1, so rail1's validation says nothing about it."""
+
+NO_TILT_CHANNELS = {"rail1": {4}}
+"""Per-channel exceptions inside an otherwise validated rail.
+
+rail1 ch4 is the single channel where tilt does not help: flat 1.77 mm abs-mean
+against 1.81 tilted, and its worst point degrades 2.77 -> 4.54 mm. It clips the
+frame edge and carries the lowest depthValidPct, so its gradient is the least
+supported fit in the set. Suppressing it holds the overall mean (0.94 mm) and
+fixes the tail -- worst 2.77 mm, better than the flat baseline's worst."""
+
+UNUSABLE_CELLS = {
+    "rail1": {
+        "1|4": "ch4 clips the frame edge at stop 1, leaving too few usable "
+               "pixels; MIN_PIX passed it anyway and the runtime check "
+               "returned -47 mm. It could not be verified against a planted "
+               "2026-09-05 cycle at all (no coverage).",
+    },
+}
+"""Cells that must never be used, whatever the fit reports.
+
+A cell marked here makes the producer REFUSE (reject_reason=no_plane_ref)
+rather than fall back to the pooled scalar, because falling back is how a known
+error hides behind a plausible number."""
+
+
+def apply_policy(ref, rail):
+    """Re-apply the validated decisions to a freshly built reference."""
+    tilt_ok = rail in TILT_VALIDATED_RAILS
+    no_tilt = NO_TILT_CHANNELS.get(rail, set())
+    unusable = UNUSABLE_CELLS.get(rail, {})
+    n_flat = 0
+    for key, cell in ref["planes"].items():
+        ch = int(key.split("|")[1])
+        if not tilt_ok or ch in no_tilt:
+            cell["a_fitted"], cell["b_fitted"] = cell["a"], cell["b"]
+            cell["a"] = cell["b"] = 0.0
+            cell["tilt_disabled"] = ("rail not tilt-validated" if not tilt_ok
+                                     else "channel excluded by NO_TILT_CHANNELS")
+            n_flat += 1
+        if key in unusable:
+            cell["unusable"] = True
+            cell["unusable_reason"] = unusable[key]
+    ref["policy"] = {"tilt_validated": tilt_ok,
+                     "no_tilt_channels": sorted(no_tilt),
+                     "unusable_cells": sorted(unusable)}
+    print(f"policy: tilt {'ON' if tilt_ok else 'OFF (rail not validated)'}; "
+          f"{n_flat} cell(s) stored flat; {len(unusable)} marked unusable")
+    return ref
+
+
 def fit_seeded(us, vs, z, tol=8.0, min_pix=MIN_PIX, passes=2):
     us = us.astype(np.float64); vs = vs.astype(np.float64); z = z.astype(np.float64)
     med = float(np.median(z))
@@ -246,6 +317,8 @@ def main():
                                           "sd_mm": round(sd, 2)}
             cells.append(f"{mm:>7.1f} {sd:>4.1f} {len(v):>4}")
         print(f"{si:>5} " + " ".join(cells))
+
+    apply_policy(ref, args.rail)
 
     sds = [v["sd_mm"] for v in ref["planes"].values()]
     print(f"\ncross-cycle scatter: mean {np.mean(sds):.2f} mm, "
