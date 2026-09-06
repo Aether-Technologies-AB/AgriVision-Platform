@@ -49,12 +49,15 @@
     848
    ],
    "plane_mm": 393.06,
-   "a": 0.029112,
-   "b": -0.015134,
+   "a": 0,
+   "b": 0,
    "n_cycles": 7,
    "sd_mm": 0.18,
    "unusable": true,
-   "unusable_reason": "ch4 clips the frame edge at stop 1; too few usable pixels to verify (runtime check returned -47 mm)"
+   "unusable_reason": "ch4 clips the frame edge at stop 1; too few usable pixels to verify (runtime check returned -47 mm)",
+   "a_fitted": 0.029112,
+   "b_fitted": -0.015134,
+   "tilt_disabled": "validated against the 16 hand-read points at stop 6: ch4 is the ONE channel where tilt does not help (flat 1.77 mm abs-mean vs tilted 1.81, worst point 2.77 -> 4.54). ch4 clips the frame edge and has the lowest depthValidPct, so its gradient fit is the least supported. plane_mm is kept; the gradient is not. Re-fit and restore a_fitted/b_fitted if a future hand read supports it."
   },
   "2|1": {
    "band": [
@@ -95,10 +98,13 @@
     848
    ],
    "plane_mm": 394.19,
-   "a": 0.024165,
-   "b": -0.012242,
+   "a": 0,
+   "b": 0,
    "n_cycles": 7,
-   "sd_mm": 0.27
+   "sd_mm": 0.27,
+   "a_fitted": 0.024165,
+   "b_fitted": -0.012242,
+   "tilt_disabled": "validated against the 16 hand-read points at stop 6: ch4 is the ONE channel where tilt does not help (flat 1.77 mm abs-mean vs tilted 1.81, worst point 2.77 -> 4.54). ch4 clips the frame edge and has the lowest depthValidPct, so its gradient fit is the least supported. plane_mm is kept; the gradient is not. Re-fit and restore a_fitted/b_fitted if a future hand read supports it."
   },
   "3|1": {
    "band": [
@@ -139,10 +145,13 @@
     848
    ],
    "plane_mm": 394.99,
-   "a": 0.021192,
-   "b": -0.009538,
+   "a": 0,
+   "b": 0,
    "n_cycles": 7,
-   "sd_mm": 0.22
+   "sd_mm": 0.22,
+   "a_fitted": 0.021192,
+   "b_fitted": -0.009538,
+   "tilt_disabled": "validated against the 16 hand-read points at stop 6: ch4 is the ONE channel where tilt does not help (flat 1.77 mm abs-mean vs tilted 1.81, worst point 2.77 -> 4.54). ch4 clips the frame edge and has the lowest depthValidPct, so its gradient fit is the least supported. plane_mm is kept; the gradient is not. Re-fit and restore a_fitted/b_fitted if a future hand read supports it."
   },
   "4|1": {
    "band": [
@@ -183,10 +192,13 @@
     848
    ],
    "plane_mm": 395.74,
-   "a": 0.022061,
-   "b": -0.008219,
+   "a": 0,
+   "b": 0,
    "n_cycles": 7,
-   "sd_mm": 0.18
+   "sd_mm": 0.18,
+   "a_fitted": 0.022061,
+   "b_fitted": -0.008219,
+   "tilt_disabled": "validated against the 16 hand-read points at stop 6: ch4 is the ONE channel where tilt does not help (flat 1.77 mm abs-mean vs tilted 1.81, worst point 2.77 -> 4.54). ch4 clips the frame edge and has the lowest depthValidPct, so its gradient fit is the least supported. plane_mm is kept; the gradient is not. Re-fit and restore a_fitted/b_fitted if a future hand read supports it."
   },
   "5|1": {
    "band": [
@@ -227,10 +239,13 @@
     847
    ],
    "plane_mm": 396,
-   "a": 0.023903,
-   "b": -0.006889,
+   "a": 0,
+   "b": 0,
    "n_cycles": 7,
-   "sd_mm": 0.18
+   "sd_mm": 0.18,
+   "a_fitted": 0.023903,
+   "b_fitted": -0.006889,
+   "tilt_disabled": "validated against the 16 hand-read points at stop 6: ch4 is the ONE channel where tilt does not help (flat 1.77 mm abs-mean vs tilted 1.81, worst point 2.77 -> 4.54). ch4 clips the frame edge and has the lowest depthValidPct, so its gradient fit is the least supported. plane_mm is kept; the gradient is not. Re-fit and restore a_fitted/b_fitted if a future hand read supports it."
   },
   "6|1": {
    "band": [
@@ -271,10 +286,13 @@
     844
    ],
    "plane_mm": 396.23,
-   "a": 0.01943,
-   "b": -0.005223,
+   "a": 0,
+   "b": 0,
    "n_cycles": 7,
-   "sd_mm": 0.12
+   "sd_mm": 0.12,
+   "a_fitted": 0.01943,
+   "b_fitted": -0.005223,
+   "tilt_disabled": "validated against the 16 hand-read points at stop 6: ch4 is the ONE channel where tilt does not help (flat 1.77 mm abs-mean vs tilted 1.81, worst point 2.77 -> 4.54). ch4 clips the frame edge and has the lowest depthValidPct, so its gradient fit is the least supported. plane_mm is kept; the gradient is not. Re-fit and restore a_fitted/b_fitted if a future hand read supports it."
   },
   "7|1": {
    "band": [
@@ -315,10 +333,13 @@
     844
    ],
    "plane_mm": 396.49,
-   "a": 0.017144,
-   "b": -0.005634,
+   "a": 0,
+   "b": 0,
    "n_cycles": 7,
-   "sd_mm": 0.15
+   "sd_mm": 0.15,
+   "a_fitted": 0.017144,
+   "b_fitted": -0.005634,
+   "tilt_disabled": "validated against the 16 hand-read points at stop 6: ch4 is the ONE channel where tilt does not help (flat 1.77 mm abs-mean vs tilted 1.81, worst point 2.77 -> 4.54). ch4 clips the frame edge and has the lowest depthValidPct, so its gradient fit is the least supported. plane_mm is kept; the gradient is not. Re-fit and restore a_fitted/b_fitted if a future hand read supports it."
   },
   "8|1": {
    "band": [
@@ -359,10 +380,13 @@
     839
    ],
    "plane_mm": 396.41,
-   "a": 0.018727,
-   "b": -0.004551,
+   "a": 0,
+   "b": 0,
    "n_cycles": 7,
-   "sd_mm": 0.18
+   "sd_mm": 0.18,
+   "a_fitted": 0.018727,
+   "b_fitted": -0.004551,
+   "tilt_disabled": "validated against the 16 hand-read points at stop 6: ch4 is the ONE channel where tilt does not help (flat 1.77 mm abs-mean vs tilted 1.81, worst point 2.77 -> 4.54). ch4 clips the frame edge and has the lowest depthValidPct, so its gradient fit is the least supported. plane_mm is kept; the gradient is not. Re-fit and restore a_fitted/b_fitted if a future hand read supports it."
   },
   "9|1": {
    "band": [
@@ -403,10 +427,13 @@
     836
    ],
    "plane_mm": 396.14,
-   "a": 0.019585,
-   "b": -0.001001,
+   "a": 0,
+   "b": 0,
    "n_cycles": 7,
-   "sd_mm": 5.36
+   "sd_mm": 5.36,
+   "a_fitted": 0.019585,
+   "b_fitted": -0.001001,
+   "tilt_disabled": "validated against the 16 hand-read points at stop 6: ch4 is the ONE channel where tilt does not help (flat 1.77 mm abs-mean vs tilted 1.81, worst point 2.77 -> 4.54). ch4 clips the frame edge and has the lowest depthValidPct, so its gradient fit is the least supported. plane_mm is kept; the gradient is not. Re-fit and restore a_fitted/b_fitted if a future hand read supports it."
   },
   "10|1": {
    "band": [
@@ -447,10 +474,13 @@
     834
    ],
    "plane_mm": 395.99,
-   "a": 0.014666,
-   "b": -0.001015,
+   "a": 0,
+   "b": 0,
    "n_cycles": 7,
-   "sd_mm": 5.97
+   "sd_mm": 5.97,
+   "a_fitted": 0.014666,
+   "b_fitted": -0.001015,
+   "tilt_disabled": "validated against the 16 hand-read points at stop 6: ch4 is the ONE channel where tilt does not help (flat 1.77 mm abs-mean vs tilted 1.81, worst point 2.77 -> 4.54). ch4 clips the frame edge and has the lowest depthValidPct, so its gradient fit is the least supported. plane_mm is kept; the gradient is not. Re-fit and restore a_fitted/b_fitted if a future hand read supports it."
   },
   "11|1": {
    "band": [
@@ -491,10 +521,13 @@
     833
    ],
    "plane_mm": 396.04,
-   "a": 0.009125,
-   "b": -0.000624,
+   "a": 0,
+   "b": 0,
    "n_cycles": 7,
-   "sd_mm": 5.87
+   "sd_mm": 5.87,
+   "a_fitted": 0.009125,
+   "b_fitted": -0.000624,
+   "tilt_disabled": "validated against the 16 hand-read points at stop 6: ch4 is the ONE channel where tilt does not help (flat 1.77 mm abs-mean vs tilted 1.81, worst point 2.77 -> 4.54). ch4 clips the frame edge and has the lowest depthValidPct, so its gradient fit is the least supported. plane_mm is kept; the gradient is not. Re-fit and restore a_fitted/b_fitted if a future hand read supports it."
   }
  }
 }
