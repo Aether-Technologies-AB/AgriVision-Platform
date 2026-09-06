@@ -296,7 +296,21 @@ silently.
 
 ## P4 — master-file corrections
 
-The master file is authoritative and now stale in four specific places.
+The **hardware** master file is now in the repo at
+[`reference/AgriVision_Camera_Rail_Master_File.md`](reference/AgriVision_Camera_Rail_Master_File.md),
+with a verified staleness header (6 stops vs the real 11, "no cron installed"
+vs a cron that runs the pipeline, depth glare "54–77% valid" vs 91.8% measured).
+Credentials in it were redacted before committing.
+
+**But that is not the file these § references point at.** `§4.1`, `§5.11`,
+`§5.14`, `§5.15`, `§6`, `§7.2`–`§7.7`, `§8`, `§9`, `§10` belong to a LATER
+revision that adds numbered sections 6–10 (site maps, the vision pipeline,
+tooling inventory, open items, operational gotchas). **That revision is still
+not in the repo, so every § reference below and throughout these docs is
+dangling.** Getting it committed is worth more than any single correction in
+it.
+
+The corrections below apply to that missing revision, and remain open:
 
 - [ ] **§7.6 + open item "Multi-view fusion not implemented".** It is
   implemented and running on *both* rails since ~2026-07-18, with
