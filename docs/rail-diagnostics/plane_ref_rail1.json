@@ -52,7 +52,9 @@
    "a": 0.029112,
    "b": -0.015134,
    "n_cycles": 7,
-   "sd_mm": 0.18
+   "sd_mm": 0.18,
+   "unusable": true,
+   "unusable_reason": "ch4 clips the frame edge at stop 1; too few usable pixels to verify (runtime check returned -47 mm)"
   },
   "2|1": {
    "band": [
@@ -224,7 +226,7 @@
     692,
     847
    ],
-   "plane_mm": 396.0,
+   "plane_mm": 396,
    "a": 0.023903,
    "b": -0.006889,
    "n_cycles": 7,
