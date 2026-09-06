@@ -31,15 +31,10 @@ type DailyRow = {
   day: Date;
   plant_count: number;
   vol_median: number | null;
-  vol_max: number | null;
+  vol_p90: number | null;
   height_mean_median_mm: number | null;
-  height_max_mm: number | null;
+  height_max_mean_mm: number | null;
   coverage_mean: number | null;
-};
-
-type NadirRow = {
-  day: Date;
-  vol_nadir_median: number | null;
 };
 
 type SiteRow = {
@@ -86,16 +81,32 @@ export async function GET(
     const since = new Date(Date.now() - (RANGE_MS[range] || RANGE_MS["30d"]));
 
     // One REPRESENTATIVE row per (day, site), then aggregate across sites per
-    // day. Selection order (matches the pipeline: fusion only happens when
-    // multiple views exist; nadir is the primary single view):
-    //   1. fused row if one exists  (isFused DESC)
-    //   2. else the nadir view      (smallest |viewAngleDeg|; NULLS FIRST keeps
-    //                                the fused row — null angle — ahead anyway)
-    //   3. latest capture that day  (capturedAt DESC) as the final tiebreak
-    // This collapses the ~4 rows/site/cycle (and multi-cycle days) to one value
-    // per site/day and never drops a site that has only per-view rows — the
-    // isFused=true filter used to discard ~96% of the data (29 fused vs 792
-    // per-view). Fused preferred, nadir fallback.
+    // day: the NADIR view only (isFused = false, |viewAngleDeg| < 5).
+    //
+    // This used to prefer the fused row, falling back to the least-oblique
+    // view. That was a fix for an earlier bug (filtering isFused = true alone
+    // discarded ~96% of rows) but it overshot in two ways, both measured on
+    // 2026-09-06:
+    //
+    //   1. It counted plants that do not exist. Fused rows are emitted even
+    //      for `nViewsFused = 1` — a single oblique view relabelled, not a
+    //      fusion — including for `row00_*` / `row12_*`, which are not in the
+    //      nadir site map at all (they sit beyond the rail ends and are only
+    //      ever seen at -19.3 deg / +16.7 deg). Floor 1 reported 39-42 plants
+    //      against `plantCount = 34`. Nadir-only reports exactly 34, every day.
+    //   2. Fused geometry is inflated ~2x by a known world-registration error
+    //      (fused area 35.4 cm2 vs 17.2 nadir on the same plants, same hour),
+    //      so the chart was showing the least trustworthy geometry available.
+    //
+    // Master file 7.6 already prescribes nadir for lettuce, and
+    // CANONICAL_GROWTH_QUERY in src/lib/fusion-traits.ts is this same
+    // selection. Upright crops (basil) may eventually want fused volume, but
+    // not before the registration fix — and then it must gate on
+    // `nViewsFused = 3`, never on `isFused` alone.
+    //
+    // Ordering within the day: prefer a row that detected a plant, then the
+    // latest capture. Every candidate row is already nadir, so there is no
+    // angle tiebreak left to make.
     const dailyP = prisma.$queryRaw<DailyRow[]>`
       WITH rep AS (
         SELECT DISTINCT ON (date_trunc('day', "capturedAt"), "siteId")
@@ -107,43 +118,39 @@ export async function GET(
           "coverage"        AS cov
         FROM "SiteObservation"
         WHERE "zoneId" = ${zoneId} AND "capturedAt" >= ${since}
+          AND "isFused" = false AND abs("viewAngleDeg") < 5
         ORDER BY date_trunc('day', "capturedAt"), "siteId",
-                 "isFused" DESC, abs("viewAngleDeg") ASC NULLS FIRST, "capturedAt" DESC
+                 "plantPresent" DESC, "capturedAt" DESC
       )
       SELECT
         day,
         COUNT(*) FILTER (WHERE plant_present)::int AS plant_count,
         (percentile_cont(0.5) WITHIN GROUP (ORDER BY vol) FILTER (WHERE plant_present))::float AS vol_median,
-        (MAX(vol) FILTER (WHERE plant_present))::float AS vol_max,
+        -- p90, not MAX. Both of these aggregate ACROSS sites, so a single bad
+        -- record defines the whole day: one 2026-09-05 rail2 record read
+        -- 4742 cm2 off 12% valid depth and moved its cycle mean from a median
+        -- of 24.6 to 144. MAX(vol) was visibly non-monotonic on Floor 1
+        -- (85 -> 127 -> 168 -> 141 -> 132 -> 237 -> 476) while p90 rose
+        -- smoothly (39.9 -> 350.4). MAX(h_max) was worse still: 21-23 cm for
+        -- two-week-old lettuce whose median plant is 3-5 cm.
+        (percentile_cont(0.9) WITHIN GROUP (ORDER BY vol) FILTER (WHERE plant_present))::float AS vol_p90,
         (percentile_cont(0.5) WITHIN GROUP (ORDER BY h_mean) FILTER (WHERE plant_present))::float AS height_mean_median_mm,
-        (MAX(h_max) FILTER (WHERE plant_present))::float AS height_max_mm,
+        (AVG(h_max) FILTER (WHERE plant_present))::float AS height_max_mean_mm,
         (AVG(cov) FILTER (WHERE plant_present))::float AS coverage_mean
       FROM rep
       GROUP BY day
       ORDER BY day ASC
     `;
 
-    // Bonus (cheap): nadir volume = the non-fused row with the smallest
-    // |viewAngleDeg| per site/day, median across sites. Merged into `days`.
-    const nadirP = prisma.$queryRaw<NadirRow[]>`
-      WITH nadir AS (
-        SELECT DISTINCT ON (date_trunc('day', "capturedAt"), "siteId")
-          date_trunc('day', "capturedAt") AS day,
-          "plantPresent" AS plant_present,
-          "canopyVolumeCm3" AS vol
-        FROM "SiteObservation"
-        WHERE "zoneId" = ${zoneId} AND "isFused" = false
-          AND "viewAngleDeg" IS NOT NULL AND "capturedAt" >= ${since}
-        ORDER BY date_trunc('day', "capturedAt"), "siteId", abs("viewAngleDeg") ASC, "capturedAt" DESC
-      )
-      SELECT day, (percentile_cont(0.5) WITHIN GROUP (ORDER BY vol) FILTER (WHERE plant_present))::float AS vol_nadir_median
-      FROM nadir
-      GROUP BY day
-      ORDER BY day ASC
-    `;
+    // The separate "nadir volume" query that used to live here has been
+    // removed: the rollup above IS nadir now, so it computed the same number
+    // from the same rows. Keeping a second query called "nadir" beside a
+    // nadir rollup invited exactly the confusion it was meant to resolve.
 
-    // Per-site daily series (one representative row per site/day) for drill-
-    // down — same fused-preferred / nadir-fallback selection as the rollup.
+    // Per-site daily series for drill-down. Same nadir-only selection as the
+    // rollup, so the table and the chart cannot disagree — previously this
+    // was fused-preferred while the chart aggregated fused rows too, and both
+    // silently showed ~2x-inflated fused geometry.
     const sitesP = prisma.$queryRaw<SiteRow[]>`
       SELECT DISTINCT ON (date_trunc('day', "capturedAt"), "siteId")
         "siteId" AS site_id,
@@ -155,34 +162,22 @@ export async function GET(
         "plantPresent"           AS plant_present
       FROM "SiteObservation"
       WHERE "zoneId" = ${zoneId} AND "capturedAt" >= ${since}
+        AND "isFused" = false AND abs("viewAngleDeg") < 5
       ORDER BY date_trunc('day', "capturedAt"), "siteId",
-               "isFused" DESC, abs("viewAngleDeg") ASC NULLS FIRST, "capturedAt" DESC
+               "plantPresent" DESC, "capturedAt" DESC
     `;
 
-    const [dailyRows, nadirRows, siteRows] = await Promise.all([
-      dailyP,
-      nadirP,
-      sitesP,
-    ]);
+    const [dailyRows, siteRows] = await Promise.all([dailyP, sitesP]);
 
-    const nadirByDay = new Map<string, number | null>();
-    for (const r of nadirRows) {
-      nadirByDay.set(new Date(r.day).toISOString(), r.vol_nadir_median);
-    }
-
-    const days = dailyRows.map((r) => {
-      const dayIso = new Date(r.day).toISOString();
-      return {
-        day: dayIso,
-        plantCount: r.plant_count,
-        volMedianCm3: r.vol_median,
-        volMaxCm3: r.vol_max,
-        volNadirMedianCm3: nadirByDay.get(dayIso) ?? null,
-        heightMeanMedianCm: mmToCm(r.height_mean_median_mm),
-        heightMaxCm: mmToCm(r.height_max_mm),
-        coveragePct: toCoveragePct(r.coverage_mean),
-      };
-    });
+    const days = dailyRows.map((r) => ({
+      day: new Date(r.day).toISOString(),
+      plantCount: r.plant_count,
+      volMedianCm3: r.vol_median,
+      volP90Cm3: r.vol_p90,
+      heightMeanMedianCm: mmToCm(r.height_mean_median_mm),
+      heightMaxMeanCm: mmToCm(r.height_max_mean_mm),
+      coveragePct: toCoveragePct(r.coverage_mean),
+    }));
 
     // Group per-site rows into series + a latest-point summary with a simple
     // trend (latest vs previous point that has a volume).

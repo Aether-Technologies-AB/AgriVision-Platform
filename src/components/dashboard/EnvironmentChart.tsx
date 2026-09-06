@@ -86,7 +86,7 @@ export default function EnvironmentChart({ zoneId }: { zoneId: string }) {
 
   const { data, isLoading } = usePolling<HistoryData>({
     url: `/api/dashboard/history/${zoneId}?range=${range}`,
-    intervalMs: 60_000, // refresh chart every 60s
+    intervalMs: 300_000, // 5 min — chart data only changes once per hourly ingest
   });
 
   const readings = data?.readings ?? [];

@@ -2,9 +2,16 @@
 
 Batch ingestion endpoint for the Pilot Basement camera-rail trait pipeline
 (two RealSense D435 rails: Floor 1 = lettuce = `rail1`, Floor 2 = basil =
-`rail2`). An off-platform GPU box analyses each rail's scan cycle locally —
-images stay there; only trait records (and, occasionally, a representative
-photo already uploaded via `/api/agent/photo`) travel to the platform.
+`rail2`). The rail's own Pi analyses each scan cycle locally — `pi4-004` for
+rail1, `pi4-005` for rail2, running
+`~/agrivision-edge/nodes/pilot-basement/piN-rail/agrivision/run_pipeline.py`
+(scan → measure_cycle → merge_views → push_traits). Images stay on the Pi;
+only trait records (and, occasionally, a representative photo already uploaded
+via `/api/agent/photo`) travel to the platform.
+
+Note: earlier revisions of this doc described the producer as "an off-platform
+GPU box". That is stale — `pop-os` holds an older copy of the analysis scripts
+and runs nothing. Verified 2026-09-02.
 
 This is a new, additive route. It does not touch `Photo`, `/api/agent/photo`,
 `/api/analysis/pending`, or `/api/analysis/results` — those remain exactly as
@@ -178,3 +185,35 @@ ORDER BY "capturedAt";
 
 Indexed via `@@index([siteId, capturedAt])` — a per-plant time series
 without scanning JSON.
+
+## Fused records: colour traits are derived server-side
+
+Since **2026-09-02**, the endpoint fills six traits on FUSED records from the
+per-view records in the same request: `coverage`, `exgMean`, `exgStd`,
+`labAMean`, `deepGreenFrac`, `depthValidPct`.
+
+`merge_views.py` emits fused records with geometry only, so before this change
+those columns were `NULL` on every fused row — the row with the best geometry
+could not report plant health. The derivation is an `areaPx`-weighted mean over
+sibling views with `plant_present: true` (`exgStd` is pooled, not averaged),
+implemented in `src/lib/fusion-traits.ts`.
+
+Three things to know:
+
+- **Fill-only.** A producer-sent value always wins. If `merge_views` starts
+  emitting these, the derivation silently stops applying — no coordination
+  needed.
+- **Siblings must be in the same POST.** `push_traits.py` sends a whole cycle
+  per call, so they are. If you post a fused record alone, its colour traits
+  stay `NULL`; nothing is invented and no error is raised.
+- **A `NULL` result is still valid.** When no sibling view reported
+  `plant_present`, the traits stay `NULL`. That happens legitimately, because
+  `merge_views` applies its protrusion gate *after* fusing while
+  `measure_cycle` gates per view — the two passes disagree by design.
+
+Geometry (`area_cm2`, `canopy_volume_cm3`, `height_mm_*`, `width_mm`) is
+**never** derived or rescaled server-side. Fused geometry is currently inflated
+~2x by a rail registration error — see
+[`observations-pipeline-changelog.md`](observations-pipeline-changelog.md) and
+[`rail-fusion-registration-fix.md`](rail-fusion-registration-fix.md). Prefer
+per-view nadir geometry until that is fixed.

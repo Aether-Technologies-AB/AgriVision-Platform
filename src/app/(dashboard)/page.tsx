@@ -206,32 +206,27 @@ export default function DashboardPage() {
       .then((d) => setZones(d.zones || []))
       .catch(console.error);
 
-    // Detail data for zone map
-    fetch(`/api/zones?${farmParam}&detail=true`)
-      .then((r) => r.json())
-      .then((d) => setZoneMapData(d.zones || []))
-      .catch(console.error);
-
     // Reset zone selection to "All Zones" when switching farms
     setSelectedZoneId(null);
   }, [selectedFarmId]);
 
-  // Refresh zone map every 30s
-  useEffect(() => {
-    if (!selectedFarmId || selectedZoneId) return; // only when viewing All Zones
-    const id = setInterval(() => {
-      fetch(`/api/zones?farmId=${selectedFarmId}&detail=true`)
-        .then((r) => r.json())
-        .then((d) => setZoneMapData(d.zones || []))
-        .catch(console.error);
-    }, 30_000);
-    return () => clearInterval(id);
-  }, [selectedFarmId, selectedZoneId]);
+  // Zone map (detail=true), only while viewing "All Zones". usePolling handles
+  // both the initial load and the refresh, and pauses while the tab is hidden.
+  usePolling<{ zones: ZoneMapData[] }>({
+    url:
+      selectedFarmId && !selectedZoneId
+        ? `/api/zones?farmId=${selectedFarmId}&detail=true`
+        : null,
+    intervalMs: 120_000,
+    enabled: !!selectedFarmId && !selectedZoneId,
+    onData: (d) => setZoneMapData(d.zones || []),
+  });
 
-  // Poll live data for selected zone
+  // Poll live data for selected zone. Sensor rows land hourly, so a sub-minute
+  // poll only bought a fresher clock — not fresher data.
   const { data: live, isStale, lastUpdated } = usePolling<LiveData>({
     url: selectedZoneId ? `/api/dashboard/live/${selectedZoneId}` : null,
-    intervalMs: 10_000,
+    intervalMs: 60_000,
     enabled: !!selectedZoneId,
   });
 

@@ -77,7 +77,7 @@ export default function WaterChart({ zoneId }: { zoneId: string }) {
 
   const { data, isLoading } = usePolling<HistoryData>({
     url: `/api/dashboard/history/${zoneId}?range=${range}`,
-    intervalMs: 60_000,
+    intervalMs: 300_000,
   });
 
   const readings = data?.readings ?? [];

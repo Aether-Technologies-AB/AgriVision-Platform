@@ -4,6 +4,12 @@ import { validateApiKey } from "@/lib/api-key";
 import { getActiveBatchId } from "@/lib/active-batch";
 import { railForZone } from "@/lib/rail-zones";
 import { markAgentSeen } from "@/lib/agent-liveness";
+import {
+  deriveFusedTraits,
+  indexViewsBySite,
+  siblingKey,
+  type DerivedFusedTraits,
+} from "@/lib/fusion-traits";
 
 // Batch trait ingestion for the Pilot Basement lettuce/basil pipeline. One
 // call per (rail, cycle) — up to ~132 records (site x view-angle, plus one
@@ -286,13 +292,35 @@ export async function POST(request: NextRequest) {
     error?: string;
   }> = [];
 
-  for (let index = 0; index < records.length; index++) {
-    const raw = records[index];
+  // Parse everything up front, before any write, so that each FUSED record can
+  // see the per-view records it was built from. push_traits posts a whole
+  // cycle per call (~167 records for rail1), so a fused record's siblings are
+  // reliably in the same request. Parse failures are carried forward and
+  // reported per-record exactly as they were when parsing happened inline.
+  const preparsed = (records as unknown[]).map((raw) => {
     try {
       if (typeof raw !== "object" || raw === null) {
         throw new RecordError("record must be a JSON object");
       }
-      const parsed = parseRecord(raw as RawRecord);
+      return { parsed: parseRecord(raw as RawRecord) };
+    } catch (err) {
+      return { err };
+    }
+  });
+
+  // Only same-rail records are eligible siblings; a record whose rail does not
+  // match the zone fails below anyway and must not feed a fused derivation.
+  const viewIndex = indexViewsBySite(
+    preparsed
+      .map((p) => p.parsed)
+      .filter((p): p is ParsedRecord => p !== undefined && p.rail === expectedRail)
+  );
+
+  for (let index = 0; index < records.length; index++) {
+    try {
+      const entry = preparsed[index];
+      if (entry.err !== undefined) throw entry.err;
+      const parsed = entry.parsed as ParsedRecord;
 
       if (parsed.rail !== expectedRail) {
         throw new RecordError(
@@ -322,6 +350,27 @@ export async function POST(request: NextRequest) {
       // unlike the compound-unique input. Not atomic under truly concurrent
       // duplicate posts of the exact same fused record, which this
       // single-producer, sequential pipeline never does.
+      // merge_views writes fused records with GEOMETRY ONLY — no coverage,
+      // exgMean, exgStd, labAMean, deepGreenFrac or depthValidPct (confirmed
+      // in the producer source; those columns were 0% populated across all
+      // 1,030 pre-existing rail1 fused rows). Derive them here from this
+      // cycle's per-view siblings so the fused row can answer "is this plant
+      // yellowing?" without every consumer re-joining the views itself.
+      //
+      // Fill-only: a producer-sent value always wins, so if merge_views ever
+      // starts emitting these, this silently stops applying. Nothing is
+      // derived for per-view records, and geometry is never derived — see
+      // fusion-traits.ts for why the fused geometry must not be rescaled here.
+      let derived: DerivedFusedTraits | null = null;
+      if (parsed.isFused) {
+        const siblings = viewIndex.get(siblingKey(parsed.cycleId, parsed.siteId));
+        if (siblings && siblings.length > 0) {
+          derived = deriveFusedTraits(siblings);
+        }
+      }
+      const filled = (own: number | null, key: keyof DerivedFusedTraits): number | null =>
+        own !== null ? own : derived ? derived[key] : null;
+
       const data = {
         zoneId,
         batchId,
@@ -348,12 +397,12 @@ export async function POST(request: NextRequest) {
         heightProfileMm: parsed.heightProfileMm as never,
         widthMm: parsed.widthMm,
         lengthMm: parsed.lengthMm,
-        coverage: parsed.coverage,
-        exgMean: parsed.exgMean,
-        exgStd: parsed.exgStd,
-        labAMean: parsed.labAMean,
-        deepGreenFrac: parsed.deepGreenFrac,
-        depthValidPct: parsed.depthValidPct,
+        coverage: filled(parsed.coverage, "coverage"),
+        exgMean: filled(parsed.exgMean, "exgMean"),
+        exgStd: filled(parsed.exgStd, "exgStd"),
+        labAMean: filled(parsed.labAMean, "labAMean"),
+        deepGreenFrac: filled(parsed.deepGreenFrac, "deepGreenFrac"),
+        depthValidPct: filled(parsed.depthValidPct, "depthValidPct"),
         clippedByRoi: parsed.clippedByRoi,
         channelPlaneMm: parsed.channelPlaneMm,
         fx: parsed.fx,
