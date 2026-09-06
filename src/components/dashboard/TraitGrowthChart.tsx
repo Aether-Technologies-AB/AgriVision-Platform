@@ -19,10 +19,9 @@ interface DayPoint {
   day: string;
   plantCount: number;
   volMedianCm3: number | null;
-  volMaxCm3: number | null;
-  volNadirMedianCm3: number | null;
+  volP90Cm3: number | null;
   heightMeanMedianCm: number | null;
-  heightMaxCm: number | null;
+  heightMaxMeanCm: number | null;
   coveragePct: number | null;
 }
 
@@ -44,6 +43,15 @@ function formatTick(ms: number): string {
   });
 }
 
+// Three different units share this chart, so the tooltip must name them —
+// "1.8" is meaningless when the neighbouring row is "31.1".
+const UNITS: Record<string, { suffix: string; decimals: number }> = {
+  Median: { suffix: " cm³", decimals: 1 },
+  p90: { suffix: " cm³", decimals: 1 },
+  Height: { suffix: " cm", decimals: 1 },
+  Plants: { suffix: "", decimals: 0 },
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -57,14 +65,19 @@ function CustomTooltip({ active, payload, label }: any) {
   return (
     <div className="rounded-lg border border-border bg-bg-card px-3 py-2 text-xs shadow-lg">
       <p className="mb-1 text-text-mid">{labelText}</p>
-      {payload.map((p: { name: string; value: number | null; color: string }) => (
-        <p key={p.name} style={{ color: p.color }}>
-          {p.name}:{" "}
-          <span className="font-mono">
-            {p.value === null || p.value === undefined ? "--" : p.value.toFixed(p.name === "Plants" ? 0 : 1)}
-          </span>
-        </p>
-      ))}
+      {payload.map((p: { name: string; value: number | null; color: string }) => {
+        const u = UNITS[p.name] ?? { suffix: "", decimals: 1 };
+        return (
+          <p key={p.name} style={{ color: p.color }}>
+            {p.name}:{" "}
+            <span className="font-mono">
+              {p.value === null || p.value === undefined
+                ? "--"
+                : `${p.value.toFixed(u.decimals)}${u.suffix}`}
+            </span>
+          </p>
+        );
+      })}
     </div>
   );
 }
@@ -80,10 +93,16 @@ export default function TraitGrowthChart({ zoneId }: { zoneId: string }) {
   const days = data?.days ?? [];
   const sites = data?.sites ?? [];
 
+  // Volume is very nearly `area x mean height` (measured: median ratio 0.991),
+  // so the volume line is a PRODUCT of a noisy term and a stable one. Plotting
+  // height alongside it separates the two: within-day CV is ~0.12 for height
+  // against ~0.36-0.40 for area and volume, so a divergence between the green
+  // and blue lines is area churn (segmentation, ROI clipping), not growth.
   const chartData = days.map((d) => ({
     t: new Date(d.day).getTime(),
     Median: d.volMedianCm3,
-    Max: d.volMaxCm3,
+    p90: d.volP90Cm3,
+    Height: d.heightMeanMedianCm,
     Plants: d.plantCount,
   }));
 
@@ -97,7 +116,7 @@ export default function TraitGrowthChart({ zoneId }: { zoneId: string }) {
             <Sprout className="h-4 w-4 text-green" />
             Canopy Growth
             <span className="ml-1 text-xs font-normal text-text-dim">
-              measured (cm³)
+              volume cm³ · height cm
             </span>
           </h3>
           <div className="flex gap-1">
@@ -154,22 +173,33 @@ export default function TraitGrowthChart({ zoneId }: { zoneId: string }) {
                   domain={[0, "dataMax + 5"]}
                   tickFormatter={(v: number) => `${v}`}
                 />
-                {/* Right axis: plant count */}
+                {/* Right axis: canopy height (cm) */}
                 <YAxis
-                  yAxisId="count"
+                  yAxisId="height"
                   orientation="right"
                   tick={{ fill: "#4a6b55", fontSize: 10 }}
                   tickLine={false}
                   axisLine={false}
+                  domain={[0, "dataMax + 1"]}
+                  tickFormatter={(v: number) => `${v}`}
+                />
+                {/* Plant count keeps its own scale but draws no ticks: it is a
+                    near-flat reference line (34 of 34 planted), so a second
+                    visible right-hand axis would cost more than it explains.
+                    Exact values are in the tooltip. */}
+                <YAxis
+                  yAxisId="count"
+                  orientation="right"
+                  hide
                   allowDecimals={false}
                   domain={[0, "dataMax + 1"]}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                {/* Faint band up to the daily max canopy volume */}
+                {/* Faint band up to the daily p90 canopy volume */}
                 <Area
                   yAxisId="vol"
                   type="monotone"
-                  dataKey="Max"
+                  dataKey="p90"
                   stroke="none"
                   fill="url(#gradCanopyMax)"
                   connectNulls
@@ -186,12 +216,23 @@ export default function TraitGrowthChart({ zoneId }: { zoneId: string }) {
                   connectNulls
                   isAnimationActive={false}
                 />
-                {/* Plant count — secondary line, right axis */}
+                {/* Canopy height — the most repeatable trait on this chart */}
+                <Line
+                  yAxisId="height"
+                  type="monotone"
+                  dataKey="Height"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls
+                  isAnimationActive={false}
+                />
+                {/* Plant count — secondary line, hidden axis */}
                 <Line
                   yAxisId="count"
                   type="monotone"
                   dataKey="Plants"
-                  stroke="#f59e0b"
+                  stroke="#e8a830"
                   strokeWidth={1.5}
                   strokeDasharray="4 3"
                   dot={false}
@@ -210,7 +251,11 @@ export default function TraitGrowthChart({ zoneId }: { zoneId: string }) {
             </span>
             <span className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-green/30" />
-              <span className="text-text-dim">Max (band)</span>
+              <span className="text-text-dim">p90 (band)</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-blue" />
+              <span className="text-text-dim">Median height (cm)</span>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-amber" />
