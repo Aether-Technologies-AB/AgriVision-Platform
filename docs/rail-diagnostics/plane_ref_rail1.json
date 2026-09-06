@@ -15,82 +15,96 @@
     69,
     209
    ],
-   "plane_mm": 407.5,
-   "a": -0.055888,
-   "b": 0.003133,
+   "plane_mm": 407.53,
+   "a": -0.056723,
+   "b": 0.004198,
    "n_cycles": 7,
-   "sd_mm": 0.2
+   "sd_mm": 0.22,
+   "mad_mm": 0.13,
+   "max_dev_mm": 0.51
   },
   "1|2": {
    "band": [
     262,
     415
    ],
-   "plane_mm": 397.5,
-   "a": -0.032037,
-   "b": -0.001976,
+   "plane_mm": 397.47,
+   "a": -0.032179,
+   "b": -0.0021,
    "n_cycles": 7,
-   "sd_mm": 0.22
+   "sd_mm": 0.21,
+   "mad_mm": 0.2,
+   "max_dev_mm": 0.47
   },
   "1|3": {
    "band": [
     458,
     616
    ],
-   "plane_mm": 393.66,
-   "a": -0.020314,
-   "b": -0.005765,
+   "plane_mm": 393.59,
+   "a": -0.019072,
+   "b": -0.006151,
    "n_cycles": 7,
-   "sd_mm": 0.24
+   "sd_mm": 0.25,
+   "mad_mm": 0.29,
+   "max_dev_mm": 0.44
   },
   "1|4": {
    "band": [
     696,
     848
    ],
-   "plane_mm": 393.06,
+   "plane_mm": 393.16,
    "a": 0,
    "b": 0,
    "n_cycles": 7,
    "sd_mm": 0.18,
+   "mad_mm": 0.1,
+   "max_dev_mm": 0.4,
+   "a_fitted": 0.030479,
+   "b_fitted": -0.014816,
+   "tilt_disabled": "channel excluded by NO_TILT_CHANNELS",
    "unusable": true,
-   "unusable_reason": "ch4 clips the frame edge at stop 1; too few usable pixels to verify (runtime check returned -47 mm)",
-   "a_fitted": 0.029112,
-   "b_fitted": -0.015134,
-   "tilt_disabled": "channel excluded by NO_TILT_CHANNELS"
+   "unusable_reason": "ch4 clips the frame edge at stop 1, leaving too few usable pixels; MIN_PIX passed it anyway and the runtime check returned -47 mm. It could not be verified against a planted 2026-09-05 cycle at all (no coverage)."
   },
   "2|1": {
    "band": [
     59,
     210
    ],
-   "plane_mm": 407.48,
-   "a": -0.056613,
-   "b": 0.005531,
+   "plane_mm": 407.49,
+   "a": -0.056582,
+   "b": 0.006109,
    "n_cycles": 7,
-   "sd_mm": 0.21
+   "sd_mm": 0.2,
+   "mad_mm": 0.15,
+   "max_dev_mm": 0.46
   },
   "2|2": {
    "band": [
     262,
     415
    ],
-   "plane_mm": 397.85,
-   "a": -0.034239,
-   "b": -0.001706,
+   "plane_mm": 397.76,
+   "a": -0.03373,
+   "b": -0.001726,
    "n_cycles": 7,
-   "sd_mm": 0.2
+   "sd_mm": 0.2,
+   "mad_mm": 0.29,
+   "max_dev_mm": 0.32
   },
   "2|3": {
    "band": [
     458,
     615
    ],
-   "plane_mm": 394.02,
-   "a": -0.013697,
-   "b": -0.003004,
+   "plane_mm": 393.9,
+   "a": -0.013699,
+   "b": -0.003078,
    "n_cycles": 7,
-   "sd_mm": 0.28
+   "sd_mm": 0.28,
+   "mad_mm": 0.34,
+   "max_dev_mm": 0.53
   },
   "2|4": {
    "band": [
@@ -101,9 +115,11 @@
    "a": 0,
    "b": 0,
    "n_cycles": 7,
-   "sd_mm": 0.27,
-   "a_fitted": 0.024165,
-   "b_fitted": -0.012242,
+   "sd_mm": 0.28,
+   "mad_mm": 0.22,
+   "max_dev_mm": 0.68,
+   "a_fitted": 0.025051,
+   "b_fitted": -0.012209,
    "tilt_disabled": "channel excluded by NO_TILT_CHANNELS"
   },
   "3|1": {
@@ -111,46 +127,54 @@
     59,
     211
    ],
-   "plane_mm": 406.99,
-   "a": -0.05498,
-   "b": 0.005313,
+   "plane_mm": 407.03,
+   "a": -0.056524,
+   "b": 0.005401,
    "n_cycles": 7,
-   "sd_mm": 0.19
+   "sd_mm": 0.19,
+   "mad_mm": 0.07,
+   "max_dev_mm": 0.47
   },
   "3|2": {
    "band": [
     264,
     416
    ],
-   "plane_mm": 397.9,
-   "a": -0.034936,
-   "b": 0.00137,
+   "plane_mm": 397.82,
+   "a": -0.033845,
+   "b": 0.000826,
    "n_cycles": 7,
-   "sd_mm": 0.21
+   "sd_mm": 0.2,
+   "mad_mm": 0.19,
+   "max_dev_mm": 0.33
   },
   "3|3": {
    "band": [
     456,
     614
    ],
-   "plane_mm": 394.18,
-   "a": -0.012515,
-   "b": -0.002178,
+   "plane_mm": 394.04,
+   "a": -0.0131,
+   "b": -0.001957,
    "n_cycles": 7,
-   "sd_mm": 0.19
+   "sd_mm": 0.2,
+   "mad_mm": 0.24,
+   "max_dev_mm": 0.41
   },
   "3|4": {
    "band": [
     693,
     848
    ],
-   "plane_mm": 394.99,
+   "plane_mm": 395.05,
    "a": 0,
    "b": 0,
    "n_cycles": 7,
-   "sd_mm": 0.22,
-   "a_fitted": 0.021192,
-   "b_fitted": -0.009538,
+   "sd_mm": 0.24,
+   "mad_mm": 0.22,
+   "max_dev_mm": 0.44,
+   "a_fitted": 0.023079,
+   "b_fitted": -0.009736,
    "tilt_disabled": "channel excluded by NO_TILT_CHANNELS"
   },
   "4|1": {
@@ -158,46 +182,54 @@
     61,
     212
    ],
-   "plane_mm": 406.97,
-   "a": -0.055138,
-   "b": 0.00274,
+   "plane_mm": 406.98,
+   "a": -0.055805,
+   "b": 0.00319,
    "n_cycles": 7,
-   "sd_mm": 0.2
+   "sd_mm": 0.2,
+   "mad_mm": 0.3,
+   "max_dev_mm": 0.35
   },
   "4|2": {
    "band": [
     265,
     417
    ],
-   "plane_mm": 397.84,
-   "a": -0.033874,
-   "b": 0.00055,
+   "plane_mm": 397.75,
+   "a": -0.033559,
+   "b": 0.000334,
    "n_cycles": 7,
-   "sd_mm": 0.23
+   "sd_mm": 0.22,
+   "mad_mm": 0.17,
+   "max_dev_mm": 0.39
   },
   "4|3": {
    "band": [
     456,
     614
    ],
-   "plane_mm": 394.19,
-   "a": -0.014017,
-   "b": -0.001757,
+   "plane_mm": 394.06,
+   "a": -0.01413,
+   "b": -0.001923,
    "n_cycles": 7,
-   "sd_mm": 0.21
+   "sd_mm": 0.22,
+   "mad_mm": 0.22,
+   "max_dev_mm": 0.47
   },
   "4|4": {
    "band": [
     693,
     848
    ],
-   "plane_mm": 395.74,
+   "plane_mm": 395.81,
    "a": 0,
    "b": 0,
    "n_cycles": 7,
-   "sd_mm": 0.18,
-   "a_fitted": 0.022061,
-   "b_fitted": -0.008219,
+   "sd_mm": 0.19,
+   "mad_mm": 0.18,
+   "max_dev_mm": 0.35,
+   "a_fitted": 0.024205,
+   "b_fitted": -0.008514,
    "tilt_disabled": "channel excluded by NO_TILT_CHANNELS"
   },
   "5|1": {
@@ -205,46 +237,54 @@
     60,
     212
    ],
-   "plane_mm": 406.78,
-   "a": -0.058317,
-   "b": 0.004542,
+   "plane_mm": 406.87,
+   "a": -0.058981,
+   "b": 0.004329,
    "n_cycles": 7,
-   "sd_mm": 0.21
+   "sd_mm": 0.21,
+   "mad_mm": 0.17,
+   "max_dev_mm": 0.38
   },
   "5|2": {
    "band": [
     266,
     418
    ],
-   "plane_mm": 397.76,
-   "a": -0.033808,
-   "b": 0.000276,
+   "plane_mm": 397.62,
+   "a": -0.0339,
+   "b": 0,
    "n_cycles": 7,
-   "sd_mm": 0.18
+   "sd_mm": 0.17,
+   "mad_mm": 0.2,
+   "max_dev_mm": 0.35
   },
   "5|3": {
    "band": [
     455,
     613
    ],
-   "plane_mm": 394.52,
-   "a": -0.015382,
-   "b": -0.002499,
+   "plane_mm": 394.43,
+   "a": -0.014822,
+   "b": -0.002861,
    "n_cycles": 7,
-   "sd_mm": 0.15
+   "sd_mm": 0.14,
+   "mad_mm": 0.13,
+   "max_dev_mm": 0.26
   },
   "5|4": {
    "band": [
     692,
     847
    ],
-   "plane_mm": 396,
+   "plane_mm": 396.03,
    "a": 0,
    "b": 0,
    "n_cycles": 7,
    "sd_mm": 0.18,
-   "a_fitted": 0.023903,
-   "b_fitted": -0.006889,
+   "mad_mm": 0.24,
+   "max_dev_mm": 0.34,
+   "a_fitted": 0.024711,
+   "b_fitted": -0.007237,
    "tilt_disabled": "channel excluded by NO_TILT_CHANNELS"
   },
   "6|1": {
@@ -253,45 +293,53 @@
     212
    ],
    "plane_mm": 406.34,
-   "a": -0.057542,
-   "b": 0.006837,
+   "a": -0.059444,
+   "b": 0.00709,
    "n_cycles": 7,
-   "sd_mm": 0.25
+   "sd_mm": 0.27,
+   "mad_mm": 0.2,
+   "max_dev_mm": 0.61
   },
   "6|2": {
    "band": [
     267,
     418
    ],
-   "plane_mm": 397.59,
-   "a": -0.036709,
-   "b": 0.000581,
+   "plane_mm": 397.53,
+   "a": -0.037489,
+   "b": 0.000222,
    "n_cycles": 7,
-   "sd_mm": 0.2
+   "sd_mm": 0.19,
+   "mad_mm": 0.17,
+   "max_dev_mm": 0.47
   },
   "6|3": {
    "band": [
     453,
     611
    ],
-   "plane_mm": 394.65,
-   "a": -0.014501,
-   "b": -0.000957,
+   "plane_mm": 394.58,
+   "a": -0.014583,
+   "b": -0.001429,
    "n_cycles": 7,
-   "sd_mm": 0.13
+   "sd_mm": 0.12,
+   "mad_mm": 0.16,
+   "max_dev_mm": 0.23
   },
   "6|4": {
    "band": [
     690,
     844
    ],
-   "plane_mm": 396.23,
+   "plane_mm": 396.34,
    "a": 0,
    "b": 0,
    "n_cycles": 7,
-   "sd_mm": 0.12,
-   "a_fitted": 0.01943,
-   "b_fitted": -0.005223,
+   "sd_mm": 0.13,
+   "mad_mm": 0.18,
+   "max_dev_mm": 0.19,
+   "a_fitted": 0.022154,
+   "b_fitted": -0.005527,
    "tilt_disabled": "channel excluded by NO_TILT_CHANNELS"
   },
   "7|1": {
@@ -300,45 +348,53 @@
     211
    ],
    "plane_mm": 405.68,
-   "a": -0.059012,
-   "b": 0.005967,
+   "a": -0.059588,
+   "b": 0.006135,
    "n_cycles": 7,
-   "sd_mm": 0.18
+   "sd_mm": 0.21,
+   "mad_mm": 0.09,
+   "max_dev_mm": 0.4
   },
   "7|2": {
    "band": [
     267,
     419
    ],
-   "plane_mm": 397.67,
-   "a": -0.036072,
-   "b": 0.002209,
+   "plane_mm": 397.57,
+   "a": -0.036316,
+   "b": 0.001264,
    "n_cycles": 7,
-   "sd_mm": 0.13
+   "sd_mm": 0.12,
+   "mad_mm": 0.14,
+   "max_dev_mm": 0.24
   },
   "7|3": {
    "band": [
     452,
     610
    ],
-   "plane_mm": 394.67,
-   "a": -0.016208,
-   "b": 0.000123,
+   "plane_mm": 394.44,
+   "a": -0.016222,
+   "b": 0.000978,
    "n_cycles": 7,
-   "sd_mm": 0.18
+   "sd_mm": 0.21,
+   "mad_mm": 0.26,
+   "max_dev_mm": 0.41
   },
   "7|4": {
    "band": [
     689,
     844
    ],
-   "plane_mm": 396.49,
+   "plane_mm": 396.5,
    "a": 0,
    "b": 0,
    "n_cycles": 7,
-   "sd_mm": 0.15,
-   "a_fitted": 0.017144,
-   "b_fitted": -0.005634,
+   "sd_mm": 0.14,
+   "mad_mm": 0.18,
+   "max_dev_mm": 0.22,
+   "a_fitted": 0.018808,
+   "b_fitted": -0.005681,
    "tilt_disabled": "channel excluded by NO_TILT_CHANNELS"
   },
   "8|1": {
@@ -346,46 +402,54 @@
     56,
     211
    ],
-   "plane_mm": 405.28,
-   "a": -0.060115,
-   "b": 0.003569,
+   "plane_mm": 405.32,
+   "a": -0.061149,
+   "b": 0.003856,
    "n_cycles": 7,
-   "sd_mm": 0.12
+   "sd_mm": 0.13,
+   "mad_mm": 0.08,
+   "max_dev_mm": 0.22
   },
   "8|2": {
    "band": [
     267,
     419
    ],
-   "plane_mm": 397.3,
-   "a": -0.031921,
-   "b": 0.002119,
+   "plane_mm": 397.27,
+   "a": -0.031846,
+   "b": 0.002003,
    "n_cycles": 7,
-   "sd_mm": 0.14
+   "sd_mm": 0.13,
+   "mad_mm": 0.08,
+   "max_dev_mm": 0.27
   },
   "8|3": {
    "band": [
     450,
     608
    ],
-   "plane_mm": 394.43,
-   "a": -0.020493,
-   "b": -0.000423,
+   "plane_mm": 394.32,
+   "a": -0.020535,
+   "b": -0.000184,
    "n_cycles": 7,
-   "sd_mm": 0.21
+   "sd_mm": 0.2,
+   "mad_mm": 0.15,
+   "max_dev_mm": 0.37
   },
   "8|4": {
    "band": [
     685,
     839
    ],
-   "plane_mm": 396.41,
+   "plane_mm": 396.45,
    "a": 0,
    "b": 0,
    "n_cycles": 7,
    "sd_mm": 0.18,
-   "a_fitted": 0.018727,
-   "b_fitted": -0.004551,
+   "mad_mm": 0.17,
+   "max_dev_mm": 0.39,
+   "a_fitted": 0.019223,
+   "b_fitted": -0.004975,
    "tilt_disabled": "channel excluded by NO_TILT_CHANNELS"
   },
   "9|1": {
@@ -393,46 +457,54 @@
     55,
     210
    ],
-   "plane_mm": 404.86,
-   "a": -0.063517,
-   "b": 0.009439,
-   "n_cycles": 7,
-   "sd_mm": 0.33
+   "plane_mm": 404.89,
+   "a": -0.064664,
+   "b": 0.01005,
+   "n_cycles": 6,
+   "sd_mm": 0.21,
+   "mad_mm": 0.23,
+   "max_dev_mm": 0.43
   },
   "9|2": {
    "band": [
     267,
     419
    ],
-   "plane_mm": 397.02,
-   "a": -0.032403,
-   "b": 0.005149,
+   "plane_mm": 396.95,
+   "a": -0.032532,
+   "b": 0.005338,
    "n_cycles": 6,
-   "sd_mm": 0.18
+   "sd_mm": 0.18,
+   "mad_mm": 0.18,
+   "max_dev_mm": 0.32
   },
   "9|3": {
    "band": [
     448,
     606
    ],
-   "plane_mm": 394.45,
-   "a": -0.025227,
-   "b": 0.002805,
+   "plane_mm": 394.37,
+   "a": -0.025147,
+   "b": 0.003255,
    "n_cycles": 6,
-   "sd_mm": 0.2
+   "sd_mm": 0.22,
+   "mad_mm": 0.22,
+   "max_dev_mm": 0.38
   },
   "9|4": {
    "band": [
     682,
     836
    ],
-   "plane_mm": 396.14,
+   "plane_mm": 396.31,
    "a": 0,
    "b": 0,
-   "n_cycles": 7,
-   "sd_mm": 5.36,
-   "a_fitted": 0.019585,
-   "b_fitted": -0.001001,
+   "n_cycles": 6,
+   "sd_mm": 0.17,
+   "mad_mm": 0.18,
+   "max_dev_mm": 0.34,
+   "a_fitted": 0.020602,
+   "b_fitted": -0.001105,
    "tilt_disabled": "channel excluded by NO_TILT_CHANNELS"
   },
   "10|1": {
@@ -440,46 +512,54 @@
     53,
     209
    ],
-   "plane_mm": 404.14,
-   "a": -0.06681,
-   "b": 0.013395,
+   "plane_mm": 404.15,
+   "a": -0.069085,
+   "b": 0.01383,
    "n_cycles": 6,
-   "sd_mm": 0.32
+   "sd_mm": 0.33,
+   "mad_mm": 0.27,
+   "max_dev_mm": 0.69
   },
   "10|2": {
    "band": [
     267,
     419
    ],
-   "plane_mm": 396.62,
-   "a": -0.031132,
-   "b": 0.005249,
+   "plane_mm": 396.61,
+   "a": -0.032063,
+   "b": 0.005443,
    "n_cycles": 6,
-   "sd_mm": 0.21
+   "sd_mm": 0.2,
+   "mad_mm": 0.14,
+   "max_dev_mm": 0.43
   },
   "10|3": {
    "band": [
     446,
     604
    ],
-   "plane_mm": 394.27,
-   "a": -0.027214,
-   "b": 0.005244,
-   "n_cycles": 7,
-   "sd_mm": 5.38
+   "plane_mm": 394.12,
+   "a": -0.027498,
+   "b": 0.004808,
+   "n_cycles": 6,
+   "sd_mm": 0.24,
+   "mad_mm": 0.22,
+   "max_dev_mm": 0.49
   },
   "10|4": {
    "band": [
     677,
     834
    ],
-   "plane_mm": 395.99,
+   "plane_mm": 396.15,
    "a": 0,
    "b": 0,
-   "n_cycles": 7,
-   "sd_mm": 5.97,
-   "a_fitted": 0.014666,
-   "b_fitted": -0.001015,
+   "n_cycles": 6,
+   "sd_mm": 0.15,
+   "mad_mm": 0.1,
+   "max_dev_mm": 0.28,
+   "a_fitted": 0.016672,
+   "b_fitted": -0.000868,
    "tilt_disabled": "channel excluded by NO_TILT_CHANNELS"
   },
   "11|1": {
@@ -487,22 +567,26 @@
     52,
     206
    ],
-   "plane_mm": 403.11,
-   "a": -0.075134,
-   "b": 0.012299,
-   "n_cycles": 7,
-   "sd_mm": 0.91
+   "plane_mm": 403.2,
+   "a": -0.074853,
+   "b": 0.013082,
+   "n_cycles": 6,
+   "sd_mm": 0.3,
+   "mad_mm": 0.39,
+   "max_dev_mm": 0.46
   },
   "11|2": {
    "band": [
     266,
     420
    ],
-   "plane_mm": 396.1,
-   "a": -0.027398,
-   "b": 0.006939,
+   "plane_mm": 396.06,
+   "a": -0.027553,
+   "b": 0.006759,
    "n_cycles": 6,
-   "sd_mm": 0.22
+   "sd_mm": 0.22,
+   "mad_mm": 0.11,
+   "max_dev_mm": 0.5
   },
   "11|3": {
    "band": [
@@ -510,23 +594,27 @@
     603
    ],
    "plane_mm": 393.94,
-   "a": -0.030544,
-   "b": 0.007723,
-   "n_cycles": 7,
-   "sd_mm": 5.14
+   "a": -0.030422,
+   "b": 0.007686,
+   "n_cycles": 6,
+   "sd_mm": 0.21,
+   "mad_mm": 0.24,
+   "max_dev_mm": 0.38
   },
   "11|4": {
    "band": [
     668,
     833
    ],
-   "plane_mm": 396.04,
+   "plane_mm": 396.06,
    "a": 0,
    "b": 0,
-   "n_cycles": 7,
-   "sd_mm": 5.87,
-   "a_fitted": 0.009125,
-   "b_fitted": -0.000624,
+   "n_cycles": 6,
+   "sd_mm": 0.13,
+   "mad_mm": 0.14,
+   "max_dev_mm": 0.22,
+   "a_fitted": 0.010924,
+   "b_fitted": -0.000126,
    "tilt_disabled": "channel excluded by NO_TILT_CHANNELS"
   }
  },
@@ -539,5 +627,6 @@
    "1|4"
   ]
  },
- "policy_note": "Applied by build_plane_ref.apply_policy(). These decisions live in the TOOL, not here — a rebuild writes fresh cells and would otherwise discard them silently. See TILT_VALIDATED_RAILS / NO_TILT_CHANNELS / UNUSABLE_CELLS in build_plane_ref.py for the evidence behind each."
+ "policy_note": "Applied by build_plane_ref.apply_policy(). These decisions live in the TOOL, not here — a rebuild writes fresh cells and would otherwise discard them silently. See TILT_VALIDATED_RAILS / NO_TILT_CHANNELS / UNUSABLE_CELLS / SHADOW_FRAC in build_plane_ref.py for the evidence behind each.",
+ "build_note": "Rebuilt 2026-09-06 with the relative-brightness (shadow) gate. Three frames from 2026-08-16_12-04-05 (stops 9/10/11, brightness 292/180/268 against that cycle median of 413 — a shadow, most likely a person at the home end on harvest day) are excluded. They passed the absolute >150 lit gate and, under FIXED bands, produced a 62.7 mm error on cell 9|2. Dropping them takes home-end cross-cycle scatter from 5-22 mm to 0.1-0.3 and closes the master file watch item on stops 9-11. plane_mm barely moved (median 0.07 mm, max 0.23) because the cross-cycle MEDIAN had already absorbed it; what changed is that sd_mm is now honest."
 }
