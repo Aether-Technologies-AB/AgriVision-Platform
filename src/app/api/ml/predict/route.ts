@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-key";
-import { readFileSync } from "fs";
-import { join } from "path";
-
-// ─── ONNX session cache (persists across warm invocations) ───
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const sessionCache = new Map<string, any>();
+// Blob fetch + WASM init + module-level session cache, moved verbatim to
+// src/lib/onnx-session.ts so /api/ml/segment shares one implementation.
+// Behaviour here is unchanged.
+import { getOrLoadSession } from "@/lib/onnx-session";
 
 // ─── ImageNet normalization constants ───
 
@@ -17,41 +14,6 @@ const INPUT_SIZE = 224;
 const CONTAM_THRESHOLD = 0.3;
 
 // ─── Helpers ───
-
-async function getOrLoadSession(modelName: string, fileUrl: string) {
-  const cacheKey = `${modelName}_${fileUrl}`;
-
-  if (sessionCache.has(cacheKey)) {
-    return sessionCache.get(cacheKey)!;
-  }
-
-  // Download model as ArrayBuffer (onnxruntime-web doesn't use filesystem)
-  const response = await fetch(fileUrl);
-  if (!response.ok) {
-    throw new Error(
-      `Failed to download model from ${fileUrl}: ${response.status}`
-    );
-  }
-  const modelBuffer = await response.arrayBuffer();
-
-  const ort = await import("onnxruntime-web");
-
-  // Load WASM binary from the bundled node_modules file
-  // Node.js ESM loader can't fetch from https:// and Vercel doesn't bundle .wasm
-  const wasmPath = join(
-    process.cwd(),
-    "node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm"
-  );
-  ort.env.wasm.wasmBinary = readFileSync(wasmPath).buffer;
-  ort.env.wasm.numThreads = 1;
-  ort.env.wasm.proxy = false;
-
-  const session = await ort.InferenceSession.create(
-    new Uint8Array(modelBuffer)
-  );
-  sessionCache.set(cacheKey, session);
-  return session;
-}
 
 async function preprocessImage(
   base64Image: string

@@ -629,6 +629,14 @@ model SiteObservation {
 
   schemaVersion Int
 
+  // How this row was measured. "gate" is the production pipeline (ExG +
+  // brightness + 8 mm height gate, largest blob in a fixed ROI); "seg-v1" is
+  // the YOLOv8s-seg lettuce instance segmenter. Without this column a
+  // model-derived row UPSERTS OVER the production row, because the unique key
+  // below carries no discriminator. Defaulted so every pre-existing row reads
+  // "gate", which is what they are.
+  method String @default("gate")
+
   createdAt DateTime @default(now())
 
   // ============================================================================
@@ -662,8 +670,18 @@ model SiteObservation {
   // and confirm "NULLS NOT DISTINCT" is still present. If a migration
   // regenerated this constraint without it, hand-add NULLS NOT DISTINCT back
   // to the generated CREATE UNIQUE INDEX statement before applying.
+  //
+  // `method` was added to this key on 2026-09-09 (migration
+  // 20260909_add_site_observation_method), so the same production cycle can be
+  // measured twice — once by the ExG/ROI gate and once by the segmentation
+  // model — without either row overwriting the other. That migration is also
+  // hand-written, and re-states NULLS NOT DISTINCT when it recreates the index.
   // ============================================================================
-  @@unique([rail, cycleId, siteId, viewAngleDeg, isFused])
+  // `map` is explicit because the name Prisma would generate for a 6-column
+  // key is 67 chars and Postgres truncates identifiers at 63 — leaving the
+  // schema and the live index disagreeing about the name. Pinned to what the
+  // database actually holds.
+  @@unique([rail, cycleId, siteId, viewAngleDeg, isFused, method], map: "SiteObservation_rail_cycleId_siteId_viewAngleDeg_isFused_method")
   @@index([siteId, capturedAt])
   @@index([zoneId, capturedAt])
   @@index([cycleId])
