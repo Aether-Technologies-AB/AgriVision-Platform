@@ -221,4 +221,183 @@ describe("POST /api/observations — repost idempotency", () => {
       await prisma.siteObservation.deleteMany({ where: { cycleId } });
     }
   });
+
+  // ── `method` discriminator (migration 20260909100000) ────────────────────
+  //
+  // The unique key gained `method` so a cycle can be measured twice — once by
+  // the production ExG/ROI gate and once by the segmentation model. Before it,
+  // a model-derived row upserted straight over the production row.
+
+  it("gate and seg-v1 FUSED rows for the same site+cycle coexist; neither overwrites the other", async () => {
+    const cycleId = `TEST-method-fused-${randomUUID()}`;
+    const siteId = "test_site_method_fused";
+    const base = {
+      rail: "rail1",
+      cycle_id: cycleId,
+      site_id: siteId,
+      global_row: 1,
+      channel: 1,
+      stop: 6,
+      view_angle_deg: "fused",
+      is_fused: true,
+      n_views_fused: 3,
+      is_primary_view: false,
+      captured_at: "2026-07-16_12-27-24",
+      plant_present: true,
+      schema: 3,
+    };
+
+    try {
+      const res = await POST(
+        buildRequest({
+          zoneId: FLOOR1_ZONE_ID,
+          records: [
+            { ...base, area_px: 1000, canopy_volume_cm3: 50.0 }, // method omitted -> "gate"
+            { ...base, method: "seg-v1", area_px: 2000, canopy_volume_cm3: 90.0 },
+          ],
+        })
+      );
+      assert.equal(res.status, 201);
+      const body = (await res.json()) as { ok: number; failed: number };
+      assert.equal(body.ok, 2);
+      assert.equal(body.failed, 0);
+
+      const rows = await prisma.siteObservation.findMany({
+        where: { rail: "rail1", cycleId, siteId, isFused: true },
+        orderBy: { method: "asc" },
+      });
+      assert.equal(rows.length, 2, "the two methods must produce two rows, not one overwriting the other");
+      assert.equal(rows[0].method, "gate");
+      assert.equal(rows[0].areaPx, 1000);
+      assert.equal(rows[0].canopyVolumeCm3, 50.0);
+      assert.equal(rows[1].method, "seg-v1");
+      assert.equal(rows[1].areaPx, 2000);
+      assert.equal(rows[1].canopyVolumeCm3, 90.0);
+
+      // And each is still individually idempotent on repost.
+      const res2 = await POST(
+        buildRequest({
+          zoneId: FLOOR1_ZONE_ID,
+          records: [
+            { ...base, area_px: 1000, canopy_volume_cm3: 50.0 },
+            { ...base, method: "seg-v1", area_px: 2000, canopy_volume_cm3: 90.0 },
+          ],
+        })
+      );
+      assert.equal(res2.status, 201);
+      const after = await prisma.siteObservation.findMany({
+        where: { rail: "rail1", cycleId, siteId, isFused: true },
+      });
+      assert.equal(after.length, 2, "reposting both methods must still yield exactly 2 rows");
+    } finally {
+      await prisma.siteObservation.deleteMany({ where: { cycleId } });
+    }
+  });
+
+  it("gate and seg-v1 PER-VIEW rows at the same view angle coexist (the typed upsert key carries method)", async () => {
+    const cycleId = `TEST-method-view-${randomUUID()}`;
+    const siteId = "test_site_method_view";
+    const base = {
+      rail: "rail1",
+      cycle_id: cycleId,
+      site_id: siteId,
+      global_row: 1,
+      channel: 1,
+      stop: 6,
+      view_angle_deg: 0.0,
+      is_primary_view: true,
+      captured_at: "2026-07-16_12-27-24",
+      plant_present: true,
+      schema: 3,
+    };
+
+    try {
+      await POST(
+        buildRequest({
+          zoneId: FLOOR1_ZONE_ID,
+          records: [
+            { ...base, area_cm2: 40.0 },
+            { ...base, method: "seg-v1", area_cm2: 60.0 },
+          ],
+        })
+      );
+      const rows = await prisma.siteObservation.findMany({
+        where: { rail: "rail1", cycleId, siteId, isFused: false },
+        orderBy: { method: "asc" },
+      });
+      assert.equal(rows.length, 2);
+      assert.deepEqual(rows.map((r) => r.method), ["gate", "seg-v1"]);
+      assert.deepEqual(rows.map((r) => r.areaCm2), [40.0, 60.0]);
+    } finally {
+      await prisma.siteObservation.deleteMany({ where: { cycleId } });
+    }
+  });
+
+  it("a seg-v1 fused row derives colour traits from its seg-v1 siblings, not the gate ones", async () => {
+    const cycleId = `TEST-method-derive-${randomUUID()}`;
+    const siteId = "test_site_method_derive";
+    const common = {
+      rail: "rail1",
+      cycle_id: cycleId,
+      site_id: siteId,
+      global_row: 1,
+      channel: 1,
+      stop: 6,
+      captured_at: "2026-07-16_12-27-24",
+      plant_present: true,
+      schema: 3,
+    };
+    const view = (method: string, angle: number, exg: number) => ({
+      ...common,
+      ...(method === "gate" ? {} : { method }),
+      view_angle_deg: angle,
+      is_primary_view: angle === 0,
+      area_px: 1000,
+      exg_mean: exg,
+      coverage: exg,
+    });
+    const fused = (method: string) => ({
+      ...common,
+      ...(method === "gate" ? {} : { method }),
+      view_angle_deg: "fused",
+      is_fused: true,
+      n_views_fused: 2,
+      is_primary_view: false,
+      area_px: 1500,
+    });
+
+    try {
+      const res = await POST(
+        buildRequest({
+          zoneId: FLOOR1_ZONE_ID,
+          records: [
+            view("gate", -18.1, 0.10),
+            view("gate", 0.0, 0.10),
+            view("seg-v1", -18.1, 0.90),
+            view("seg-v1", 0.0, 0.90),
+            fused("gate"),
+            fused("seg-v1"),
+          ],
+        })
+      );
+      assert.equal(res.status, 201);
+
+      const rows = await prisma.siteObservation.findMany({
+        where: { rail: "rail1", cycleId, siteId, isFused: true },
+        orderBy: { method: "asc" },
+      });
+      assert.equal(rows.length, 2);
+
+      const gateFused = rows.find((r) => r.method === "gate")!;
+      const segFused = rows.find((r) => r.method === "seg-v1")!;
+
+      assert.ok(gateFused.exgMean !== null && Math.abs(gateFused.exgMean - 0.10) < 1e-6,
+        `gate fused row should derive 0.10 from its gate siblings, got ${gateFused.exgMean}`);
+      assert.ok(segFused.exgMean !== null && Math.abs(segFused.exgMean - 0.90) < 1e-6,
+        `seg-v1 fused row must derive 0.90 from its seg-v1 siblings, not be contaminated by the gate siblings' 0.10 — got ${segFused.exgMean}`);
+      assert.ok(segFused.coverage !== null && Math.abs(segFused.coverage - 0.90) < 1e-6);
+    } finally {
+      await prisma.siteObservation.deleteMany({ where: { cycleId } });
+    }
+  });
 });

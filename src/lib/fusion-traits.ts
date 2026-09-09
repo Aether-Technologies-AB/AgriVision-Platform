@@ -71,6 +71,9 @@
  *  route's ParsedRecord and a plain test fixture satisfy it. */
 export type ViewTraitSource = {
   isFused: boolean;
+  /** "gate" (production ExG/ROI) or "seg-v1" (segmentation model). A fused row
+   *  must only ever be filled from siblings measured the SAME way. */
+  method: string;
   plantPresent: boolean;
   areaPx: number | null;
   coverage: number | null;
@@ -103,11 +106,17 @@ export type DerivedFusedTraits = {
 };
 
 /** Group key for matching a fused record to its per-view siblings. Uses a NUL
- *  byte, which cannot occur in either id — unlike "|" or "_", both of which
+ *  byte, which cannot occur in any of the ids — unlike "|" or "_", both of which
  *  appear inside real cycleIds ("2026-09-02_11-01-10") and siteIds
- *  ("row06_ch2"). */
-export function siblingKey(cycleId: string, siteId: string): string {
-  return `${cycleId}\u0000${siteId}`;
+ *  ("row06_ch2").
+ *
+ *  `method` is part of the key. Since 2026-09-09 one cycle can be measured
+ *  twice — by the production ExG/ROI gate and by the segmentation model — and
+ *  the two produce different masks over the same plant. Keying without it lets
+ *  a `gate` per-view sibling silently fill a `seg-v1` fused row's colour
+ *  traits, which would read as a model measurement while being a gate one. */
+export function siblingKey(cycleId: string, siteId: string, method: string): string {
+  return `${cycleId}\u0000${siteId}\u0000${method}`;
 }
 
 /** Index the non-fused records of one POST by (cycleId, siteId) so each fused
@@ -120,7 +129,7 @@ export function indexViewsBySite<T extends ViewTraitSource & { cycleId: string; 
   const index = new Map<string, T[]>();
   for (const rec of records) {
     if (rec.isFused) continue;
-    const key = siblingKey(rec.cycleId, rec.siteId);
+    const key = siblingKey(rec.cycleId, rec.siteId, rec.method);
     const bucket = index.get(key);
     if (bucket) bucket.push(rec);
     else index.set(key, [rec]);
@@ -157,6 +166,10 @@ export function indexViewsBySite<T extends ViewTraitSource & { cycleId: string; 
  *
  * Returns all-null when no view detected a plant — callers must not read that
  * as zero.
+ *
+ * This function does NOT filter by `method` — it averages exactly the views it
+ * is handed. Keeping the methods apart is the caller's job, and is done by
+ * `siblingKey`, which includes the method in the group key.
  */
 export function deriveFusedTraits(views: ViewTraitSource[]): DerivedFusedTraits {
   const contributing = views.filter((v) => !v.isFused && v.plantPresent);

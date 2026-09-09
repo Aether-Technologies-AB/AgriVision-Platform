@@ -61,6 +61,7 @@ type ParsedRecord = {
   calibrationVersion: string | null;
   schemaVersion: number;
   photoId: string | null;
+  method: string;
 };
 
 class RecordError extends Error {}
@@ -197,6 +198,10 @@ function parseRecord(rec: RawRecord): ParsedRecord {
     calibrationVersion: optString(rec, "calibration_version"),
     schemaVersion: reqInt(rec, "schema"),
     photoId: optString(rec, "photo_id"),
+    // How this row was measured. Absent means the production ExG/ROI gate,
+    // which is every producer that predates the segmentation model — so the
+    // default keeps old producers posting exactly what they posted before.
+    method: optString(rec, "method") ?? "gate",
   };
 }
 
@@ -287,6 +292,7 @@ export async function POST(request: NextRequest) {
     siteId?: string;
     cycleId?: string;
     viewAngleDeg?: number | null;
+    method?: string;
     status: "ok" | "error";
     id?: string;
     error?: string;
@@ -332,7 +338,11 @@ export async function POST(request: NextRequest) {
         throw new RecordError(`photo_id "${parsed.photoId}" not found in this zone`);
       }
 
-      // Idempotency. The real Postgres index behind this unique constraint
+      // Idempotency. The unique key includes `method`, so the gate pipeline
+      // and the segmentation model each own their own row for a given
+      // (rail, cycle, site, view) and neither can upsert over the other.
+      //
+      // The real Postgres index behind this unique constraint
       // is declared NULLS NOT DISTINCT (see the migration SQL — Prisma's
       // schema DSL can't express that keyword, so the @@unique in
       // schema.prisma is a plain UNIQUE for typing purposes only), so the DB
@@ -363,7 +373,9 @@ export async function POST(request: NextRequest) {
       // fusion-traits.ts for why the fused geometry must not be rescaled here.
       let derived: DerivedFusedTraits | null = null;
       if (parsed.isFused) {
-        const siblings = viewIndex.get(siblingKey(parsed.cycleId, parsed.siteId));
+        const siblings = viewIndex.get(
+          siblingKey(parsed.cycleId, parsed.siteId, parsed.method)
+        );
         if (siblings && siblings.length > 0) {
           derived = deriveFusedTraits(siblings);
         }
@@ -411,6 +423,7 @@ export async function POST(request: NextRequest) {
         freshWeightGEst: null,
         calibrationVersion: parsed.calibrationVersion,
         schemaVersion: parsed.schemaVersion,
+        method: parsed.method,
       };
 
       let row;
@@ -424,6 +437,9 @@ export async function POST(request: NextRequest) {
             siteId: parsed.siteId,
             viewAngleDeg: null,
             isFused: parsed.isFused,
+            // Without this a seg-v1 fused row would find, and overwrite, the
+            // gate fused row for the same site and cycle.
+            method: parsed.method,
           },
           select: { id: true },
         });
@@ -433,12 +449,13 @@ export async function POST(request: NextRequest) {
       } else {
         row = await prisma.siteObservation.upsert({
           where: {
-            rail_cycleId_siteId_viewAngleDeg_isFused: {
+            rail_cycleId_siteId_viewAngleDeg_isFused_method: {
               rail: parsed.rail,
               cycleId: parsed.cycleId,
               siteId: parsed.siteId,
               viewAngleDeg: parsed.viewAngleDeg,
               isFused: parsed.isFused,
+              method: parsed.method,
             },
           },
           create: data,
@@ -451,6 +468,7 @@ export async function POST(request: NextRequest) {
         siteId: parsed.siteId,
         cycleId: parsed.cycleId,
         viewAngleDeg: parsed.viewAngleDeg,
+        method: parsed.method,
         status: "ok",
         id: row.id,
       });
