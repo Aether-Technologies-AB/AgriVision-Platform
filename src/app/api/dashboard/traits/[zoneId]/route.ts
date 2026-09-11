@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { railForZone } from "@/lib/rail-zones";
+import { AREA_METHOD, summarizeArea, type AreaPoint } from "@/lib/area-measurement";
 
 // Daily rollup of camera-rail trait data (SiteObservation) for one zone.
 // READ-ONLY, computed live on each request — no materialized table, no writes.
@@ -119,6 +121,7 @@ export async function GET(
         FROM "SiteObservation"
         WHERE "zoneId" = ${zoneId} AND "capturedAt" >= ${since}
           AND "isFused" = false AND abs("viewAngleDeg") < 5
+          AND "method" = 'gate'
         ORDER BY date_trunc('day', "capturedAt"), "siteId",
                  "plantPresent" DESC, "capturedAt" DESC
       )
@@ -163,11 +166,47 @@ export async function GET(
       FROM "SiteObservation"
       WHERE "zoneId" = ${zoneId} AND "capturedAt" >= ${since}
         AND "isFused" = false AND abs("viewAngleDeg") < 5
+        AND "method" = 'gate'
       ORDER BY date_trunc('day', "capturedAt"), "siteId",
                "plantPresent" DESC, "capturedAt" DESC
     `;
 
-    const [dailyRows, siteRows] = await Promise.all([dailyP, sitesP]);
+    const isLettuceRail = railForZone(zoneId) === "rail1";
+    const areaMethod = request.nextUrl.searchParams.get("areaMethod") || AREA_METHOD;
+    if (![AREA_METHOD, "seg-v1", "gate"].includes(areaMethod)) {
+      return NextResponse.json({ error: "Unknown area method" }, { status: 400 });
+    }
+    const areaP = isLettuceRail ? prisma.$queryRaw<{
+      site_id: string; day: Date; captured_at: Date; area: number | null;
+      present: boolean; meta: { quality_flags?: string[]; valid_depth_px?: number } | null;
+      depth_pct: number | null;
+    }[]>`
+      SELECT DISTINCT ON (date_trunc('day', "capturedAt"), "siteId")
+        "siteId" AS site_id, date_trunc('day', "capturedAt") AS day,
+        "capturedAt" AS captured_at, "areaCm2"::float AS area,
+        "plantPresent" AS present, "measurementMeta" AS meta, "depthValidPct" AS depth_pct
+      FROM "SiteObservation"
+      WHERE "zoneId" = ${zoneId} AND "capturedAt" >= ${since}
+        AND "method" = ${areaMethod} AND "rail" = 'rail1'
+        AND "isFused" = false AND "isPrimaryView" = true AND abs("viewAngleDeg") < 5
+      ORDER BY date_trunc('day', "capturedAt"), "siteId", "capturedAt" DESC
+    ` : Promise.resolve([]);
+    const [dailyRows, siteRows, areaRows] = await Promise.all([dailyP, sitesP, areaP]);
+    const areaPoints: AreaPoint[] = areaRows.map(r => {
+      const qualityFlags = [...(r.meta?.quality_flags ?? [])];
+      if (r.depth_pct === null || r.depth_pct < 80) {
+        if (!qualityFlags.includes("low_depth_support")) qualityFlags.push("low_depth_support");
+      }
+      if (areaMethod === AREA_METHOD && !r.meta) qualityFlags.push("missing_provenance");
+      return { siteId: r.site_id, day: new Date(r.day).toISOString(), capturedAt: new Date(r.captured_at).toISOString(),
+        areaCm2: r.area, plantPresent: r.present, qualityFlags,
+        eligible: r.present && r.area !== null && !qualityFlags.some(f =>
+          ["low_depth_support", "insufficient_depth", "ambiguous_match", "missing_provenance"].includes(f)) };
+    });
+    const latestArea = new Map<string, AreaPoint>();
+    for (const p of areaPoints) {
+      if (!latestArea.has(p.siteId) || latestArea.get(p.siteId)!.capturedAt < p.capturedAt) latestArea.set(p.siteId, p);
+    }
 
     const days = dailyRows.map((r) => ({
       day: new Date(r.day).toISOString(),
@@ -224,7 +263,9 @@ export async function GET(
       })
       .sort((a, b) => a.siteId.localeCompare(b.siteId));
 
-    return NextResponse.json({ zoneId, range, days, sites });
+    return NextResponse.json({ zoneId, range, days, sites, legacyMethod: "gate",
+      area: isLettuceRail ? { method: areaMethod, days: summarizeArea(areaPoints),
+        sites: [...latestArea.values()].sort((a,b) => a.siteId.localeCompare(b.siteId)), points: areaPoints } : null });
   } catch (err) {
     console.error("Dashboard traits error:", err);
     return NextResponse.json(

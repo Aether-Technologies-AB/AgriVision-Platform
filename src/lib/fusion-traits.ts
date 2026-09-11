@@ -274,6 +274,7 @@ SELECT "siteId",
        avg("deepGreenFrac")   AS deep_green_frac
 FROM "SiteObservation"
 WHERE "rail" = $1
+  AND "method" = 'gate'
   AND "isFused" = false
   AND "plantPresent" = true
   AND abs("viewAngleDeg") < 5

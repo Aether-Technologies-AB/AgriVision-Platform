@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
+import { parseAreaMetadata, type AreaMetadata } from "@/lib/area-measurement";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-key";
 import { getActiveBatchId } from "@/lib/active-batch";
@@ -62,6 +64,7 @@ type ParsedRecord = {
   schemaVersion: number;
   photoId: string | null;
   method: string;
+  measurementMeta: AreaMetadata | null;
 };
 
 class RecordError extends Error {}
@@ -145,6 +148,12 @@ function parseCapturedAt(raw: string): Date {
 }
 
 function parseRecord(rec: RawRecord): ParsedRecord {
+  let measurementMeta: AreaMetadata | null;
+  try {
+    measurementMeta = parseAreaMetadata(rec.measurement_meta, rec);
+  } catch (error) {
+    throw new RecordError(error instanceof Error ? error.message : "Invalid measurement_meta");
+  }
   const rail = reqString(rec, "rail");
   const rawViewAngle = rec["view_angle_deg"];
   const isFusedExplicit = rec["is_fused"];
@@ -165,6 +174,7 @@ function parseRecord(rec: RawRecord): ParsedRecord {
 
   return {
     rail,
+    measurementMeta,
     cycleId: reqString(rec, "cycle_id"),
     siteId: reqString(rec, "site_id"),
     globalRow: reqInt(rec, "global_row"),
@@ -403,6 +413,7 @@ export async function POST(request: NextRequest) {
         rejectReason: parsed.rejectReason,
         areaPx: parsed.areaPx,
         areaCm2: parsed.areaCm2,
+        measurementMeta: parsed.measurementMeta ?? Prisma.DbNull,
         canopyVolumeCm3: parsed.canopyVolumeCm3,
         heightMmMax: parsed.heightMmMax,
         heightMmMean: parsed.heightMmMean,

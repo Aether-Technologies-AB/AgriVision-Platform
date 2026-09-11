@@ -604,6 +604,7 @@ model SiteObservation {
 
   areaPx          Int?
   areaCm2         Float?
+  measurementMeta Json? // Versioned area provenance and quality flags; legacy rows null.
   canopyVolumeCm3 Float?
   heightMmMax     Float?
   heightMmMean    Float?

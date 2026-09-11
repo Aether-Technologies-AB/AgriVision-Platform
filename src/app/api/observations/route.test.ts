@@ -85,6 +85,45 @@ function buildRequest(body: unknown): InstanceType<typeof NextRequest> {
 }
 
 describe("POST /api/observations — repost idempotency", () => {
+  it("area-v2 coexists with both legacy methods, persists quality and remains idempotent", async () => {
+    const cycleId = `TEST-area-v2-${randomUUID()}`;
+    const base = { rail: "rail1", cycle_id: cycleId, site_id: "test_area_v2", global_row: 1,
+      channel: 1, stop: 1, view_angle_deg: 0, is_fused: false, is_primary_view: true,
+      captured_at: "2026-07-16_12-27-24", plant_present: false, reject_reason: "pale", schema: 3 };
+    const meta = {
+      algorithm_version: "seg-area-v2", implementation_revision: "numpy-rf-1",
+      vegetation_model_sha256: "4c62c1364482f0bb518db6c8628375700856327b0f01d5e61f8e5eebc3da551f",
+      runtime_model_sha256: "f44b1798deddfe0c6b9d6154fca8cbc8d86ff68375f0ce87cdf68f2a909eb008",
+      vegetation_threshold: 0.5, ownership_rule: "nearest-claimant-row-desc-channel-asc-v1",
+      raw_polygon_px: 120, background_removed_px: 10, ownership_removed_px: 10,
+      raw_polygon_area_cm2: null, median_depth_mm: null, valid_depth_px: 19, depth_valid_pct: 19,
+      frame_edge_distances_px: { left: 0, right: 10, top: 10, bottom: 10 },
+      quality_flags: ["near_frame_edge", "low_depth_support", "insufficient_depth"], presence_source: "seg-v1",
+    };
+    const records = [
+      { ...base, method: "gate", area_cm2: 1, height_mm_mean: 20 },
+      { ...base, method: "seg-v1", area_cm2: 2, height_mm_mean: 21 },
+      { ...base, method: "seg-area-v2", area_cm2: null, area_px: 100, fx: 400,
+        depth_valid_pct: 19, measurement_meta: meta },
+    ];
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const res = await POST(buildRequest({ zoneId: FLOOR1_ZONE_ID, records }));
+        assert.equal(res.status, 201, JSON.stringify(await res.json()));
+      }
+      const rows = await prisma.siteObservation.findMany({ where: { cycleId }, orderBy: { method: "asc" } });
+      assert.equal(rows.length, 3);
+      const v2 = rows.find(r => r.method === "seg-area-v2")!;
+      assert.deepEqual(v2.measurementMeta, meta);
+      assert.equal(v2.areaCm2, null);
+      assert.equal(v2.heightMmMean, null);
+      assert.equal(v2.plantPresent, false);
+      assert.equal(rows.find(r => r.method === "gate")!.heightMmMean, 20);
+      assert.equal(rows.find(r => r.method === "seg-v1")!.heightMmMean, 21);
+    } finally {
+      await prisma.siteObservation.deleteMany({ where: { cycleId } });
+    }
+  });
   it("FUSED record (viewAngleDeg null): reposting the identical record does not duplicate it", async () => {
     const cycleId = `TEST-fused-${randomUUID()}`;
     const siteId = "test_site_fused";

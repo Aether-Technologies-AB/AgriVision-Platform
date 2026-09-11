@@ -14,6 +14,7 @@ import {
 import { Sprout } from "lucide-react";
 import { usePolling } from "@/lib/use-polling";
 import TraitSiteTable, { SiteSummary } from "./TraitSiteTable";
+import CanopyAreaPanel, { type CanopyAreaData } from "./CanopyAreaPanel";
 
 interface DayPoint {
   day: string;
@@ -26,6 +27,7 @@ interface DayPoint {
 }
 
 interface TraitData {
+  area: CanopyAreaData | null;
   zoneId: string;
   range: string;
   days: DayPoint[];
@@ -84,9 +86,10 @@ function CustomTooltip({ active, payload, label }: any) {
 
 export default function TraitGrowthChart({ zoneId }: { zoneId: string }) {
   const [range, setRange] = useState<(typeof RANGES)[number]>("30d");
+  const [areaMethod, setAreaMethod] = useState("seg-area-v2");
 
   const { data, isLoading } = usePolling<TraitData>({
-    url: `/api/dashboard/traits/${zoneId}?range=${range}`,
+    url: `/api/dashboard/traits/${zoneId}?range=${range}&areaMethod=${areaMethod}`,
     intervalMs: 300_000, // same cadence as EnvironmentChart
   });
 
@@ -110,6 +113,7 @@ export default function TraitGrowthChart({ zoneId }: { zoneId: string }) {
 
   return (
     <>
+      {data?.area && <CanopyAreaPanel data={data.area} method={areaMethod} onMethodChange={setAreaMethod} />}
       <div className="rounded-xl border border-border bg-bg-card p-4">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="flex items-center gap-1.5 text-sm font-medium text-text">
